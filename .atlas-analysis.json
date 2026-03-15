@@ -1,0 +1,176 @@
+{
+  "projectType": "api-service",
+  "projectName": "Worlds Platform",
+  "projectDescription": "Worlds is an open-source neuro-symbolic infrastructure layer providing a REST API for managing SPARQL-compatible knowledge bases, enabling AI agents with persistent structured memory and world models.",
+  "theme": "sequoia",
+  "primaryColor": "#fb9c04",
+  "lightColor": "#fcdf7f",
+  "darkColor": "#6d7475",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Developer Platform",
+        "groups": [
+          {
+            "group": "Welcome",
+            "pages": ["overview/introduction"]
+          },
+          {
+            "group": "Get Started",
+            "pages": [
+              "overview/getting-started/quickstart",
+              "overview/getting-started/authentication"
+            ]
+          },
+          {
+            "group": "Tutorials",
+            "pages": ["overview/getting-started/agent-integration"]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "overview/philosophy",
+              "overview/architecture",
+              "overview/world-memory",
+              "overview/features"
+            ]
+          },
+          {
+            "group": "Background",
+            "pages": [
+              "overview/whitepaper",
+              "overview/use-cases",
+              "overview/roadmap",
+              "overview/maturity",
+              "overview/history"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/rag-workflows/graph-rag",
+              "guides/rag-workflows/ontology-rag",
+              "guides/rag-workflows/document-rag",
+              "guides/data-integration",
+              "guides/querying",
+              "guides/hosting/production",
+              "guides/monitoring",
+              "guides/knowledge-graphs",
+              "guides/semantic-search"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "guides/examples/code-samples",
+              "guides/examples/datasets",
+              "guides/examples/tutorials",
+              "guides/examples/integrations"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Academy",
+        "groups": [
+          {
+            "group": "Academy",
+            "pages": [
+              "academy/index",
+              "academy/memory",
+              "academy/graphs",
+              "academy/sparql",
+              "academy/agents"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "API Basics",
+            "pages": ["reference/api", "reference/api-basics/authentication"]
+          },
+          {
+            "group": "CLI",
+            "pages": ["reference/cli"]
+          },
+          {
+            "group": "Configuration",
+            "pages": ["reference/configuration"]
+          },
+          {
+            "group": "System Internals",
+            "pages": ["reference/request-flow"]
+          },
+          {
+            "group": "Changelog",
+            "pages": ["reference/changelog"]
+          }
+        ]
+      },
+      {
+        "tab": "Contributing",
+        "groups": [
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/developer-guide",
+              "contributing/guidelines",
+              "contributing/best-practices",
+              "contributing/code-of-conduct",
+              "contributing/getting-help"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "SPARQL 1.1 knowledge graph query and update engine",
+    "Neuro-symbolic hybrid search (vector + keyword + graph filters)",
+    "AI SDK integration with first-class LLM tool-calling support",
+    "Edge-first architecture powered by Deno and Turso (libSQL)",
+    "RDF import/export (Turtle, N-Quads, N-Triples, N3)",
+    "Persistent structured agent memory across sessions",
+    "TypeScript SDK published to JSR (@wazoo/worlds-sdk)",
+    "Command-line interface for world management",
+    "Worlds Console web UI for visual graph exploration",
+    "Provider-agnostic: works with any LLM or agent framework"
+  ],
+  "publicApiSurface": [
+    "WorldsSdk",
+    "WorldsSdk.worlds.list(options?)",
+    "WorldsSdk.worlds.get(id)",
+    "WorldsSdk.worlds.create(params)",
+    "WorldsSdk.worlds.update(id, params)",
+    "WorldsSdk.worlds.delete(id)",
+    "WorldsSdk.worlds.sparql(id, query, options?)",
+    "WorldsSdk.worlds.search(id, query, options?)",
+    "WorldsSdk.worlds.import(id, data, options?)",
+    "WorldsSdk.worlds.export(id, options?)",
+    "WorldsSdk.worlds.listLogs(id, options?)",
+    "createTools({ sdk, sources }) — AI SDK tool factory",
+    "worlds create --label <label>",
+    "worlds list",
+    "worlds get <worldId>",
+    "worlds update <worldId>",
+    "worlds delete <worldId>",
+    "worlds sparql <worldId> <query>",
+    "worlds search <worldId> <query>",
+    "worlds import <worldId> <file>",
+    "worlds export <worldId>",
+    "worlds chat --worldId <id>",
+    "GET /worlds",
+    "POST /worlds",
+    "GET /worlds/:world",
+    "PUT /worlds/:world",
+    "DELETE /worlds/:world",
+    "POST /worlds/:world/sparql",
+    "GET /worlds/:world/search",
+    "POST /worlds/:world/import",
+    "GET /worlds/:world/export",
+    "GET /worlds/:world/logs"
+  ]
+}
