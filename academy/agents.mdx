@@ -1,0 +1,263 @@
+---
+title: "Neuro-symbolic agent integration"
+description: "Connect AI agents to world memory using tool-calling, and learn why the neuro-symbolic architecture closes the Reasoning Gap that defeats pure vector RAG."
+---
+
+This is the final module in the [Worlds Academy](/academy). You will connect an AI agent (such as GPT-4o) to a World, give it tools to read and write structured memory, and understand why this neuro-symbolic architecture is fundamentally more powerful than pure vector RAG for stateful reasoning tasks.
+
+## The Reasoning Gap
+
+Large Language Models are powerful pattern-matchers over text. But they have a structural weakness when used as autonomous agents: **they cannot maintain or reason over structured state across sessions**.
+
+Pure vector RAG partially addresses this by retrieving relevant documents at query time, but it cannot:
+
+- Follow a chain of relationships across multiple entities with precision
+- Update a fact without rewriting the source document
+- Answer yes/no questions about the existence of a specific relationship
+- Share a consistent, queryable model of the world with other agents
+
+This is the **Reasoning Gap** — the gap between what an LLM can do with raw text and what it needs to be a reliable, stateful agent.
+
+**Worlds closes the Reasoning Gap** by giving the agent a symbolic memory layer that it can query and update through tool calls.
+
+## Neuro-symbolic architecture
+
+The Worlds integration bridges two paradigms:
+
+- **Neural** — the LLM that understands and generates natural language
+- **Symbolic** — the Worlds graph that stores structured facts and executes logical queries
+
+Neither component alone is sufficient. The LLM cannot hold structured state reliably in its weights. The graph cannot understand ambiguous natural language instructions. Together, they form a system that is more capable than either individually.
+
+```
+User prompt
+     │
+     ▼
+┌─────────────┐     tool call (SPARQL)     ┌────────────────┐
+│     LLM     │ ─────────────────────────► │  Worlds graph  │
+│  (neural)   │ ◄───────────────────────── │  (symbolic)    │
+└─────────────┘     structured results     └────────────────┘
+     │
+     ▼
+Grounded, factual response
+```
+
+The loop is:
+1. The user provides a natural language prompt.
+2. The LLM determines it needs information from the World and issues a tool call.
+3. The tool executes a SPARQL query or update against the Worlds API.
+4. The graph returns structured data.
+5. The LLM generates a factually grounded response.
+
+## Using the AI SDK
+
+The `@wazoo/worlds-ai-sdk` package provides pre-built tools for the [Vercel AI SDK](https://sdk.vercel.ai). You create tools with `createTools()` and pass them directly to `generateText()` or `streamText()`.
+
+### Installation
+
+```bash
+npm install @wazoo/worlds-sdk @wazoo/worlds-ai-sdk ai @ai-sdk/openai
+```
+
+### Basic setup
+
+```typescript
+import { generateText } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+import { createTools } from "@wazoo/worlds-ai-sdk";
+
+const sdk = new WorldsSdk({
+  baseUrl: "http://localhost:8000",
+  apiKey: process.env.WORLDS_API_KEY,
+});
+
+const { text } = await generateText({
+  model: openai("gpt-4o"),
+  tools: createTools({
+    sdk,
+    sources: [{ id: "my-knowledge-base" }],
+  }),
+  prompt: "Find all team members and summarise their roles.",
+});
+```
+
+## The three agent tools
+
+`createTools()` returns three tools that the LLM can invoke during a conversation. Each tool has a typed input schema (validated with Zod) and a typed output schema.
+
+### executeSparql
+
+Executes a SPARQL query or update against a specific World.
+
+```typescript
+// What the LLM sees:
+{
+  name: "executeSparql",
+  description: "Execute SPARQL queries and updates against a specific world knowledge base.",
+  parameters: {
+    source: string,  // ID of the World to query
+    sparql: string,  // The SPARQL query or update string
+  }
+}
+```
+
+Sources are configured as read-only or writable when you call `createTools()`. If the LLM attempts an `INSERT` or `DELETE` against a read-only source, the tool throws an error before hitting the API.
+
+```typescript
+const tools = createTools({
+  sdk,
+  sources: [
+    { id: "public-kb" },              // read-only by default
+    { id: "agent-memory", write: true }, // write-enabled
+  ],
+});
+```
+
+**Example tool call by the LLM:**
+
+```json
+{
+  "tool": "executeSparql",
+  "input": {
+    "source": "agent-memory",
+    "sparql": "SELECT ?name WHERE { <http://example.com/ethan> <http://schema.org/relatedTo> ?person . ?person <http://schema.org/givenName> ?name . }"
+  }
+}
+```
+
+### searchEntities
+
+Resolves ambiguous natural language entity references to their graph URIs. The agent uses this before executing a SPARQL query when it is not certain of the exact URI for an entity mentioned in the user's message.
+
+```typescript
+// What the LLM sees:
+{
+  name: "searchEntities",
+  description: "Search for entities in the knowledge base. Returns a list of candidates to help resolve ambiguities.",
+  parameters: {
+    source: string,       // ID of the World to search
+    query: string,        // The entity name as mentioned in the text
+    types?: string[],     // Optional: filter by RDF class URIs
+    limit?: number,       // Optional: max results (1-100, default 10)
+  }
+}
+```
+
+**Example:** if the user says "tell me about Ethan", the agent calls `searchEntities` with `query: "Ethan"` to discover the canonical URI `<http://example.com/ethan>` before running a SPARQL query.
+
+### discoverSchema
+
+Introspects the vocabulary available in the knowledge base — the RDF classes and properties that have been used. This helps the LLM write correct SPARQL without hallucinating predicate names.
+
+```typescript
+// What the LLM sees:
+{
+  name: "discoverSchema",
+  description: "Discover the available classes and properties (vocabulary) in the knowledge base schema.",
+}
+```
+
+Calling `discoverSchema` first is the recommended pattern before issuing complex SPARQL queries against an unfamiliar World.
+
+## The neuro-symbolic reasoning loop
+
+Here is a realistic end-to-end flow for an agent answering "What is Ethan's relationship to Gregory, and where does Gregory live?"
+
+<Steps>
+  <Step title="User prompt received">
+    The agent receives the natural language question. The LLM does not know the answer from its training weights alone.
+  </Step>
+
+  <Step title="Schema discovery">
+    The LLM calls `discoverSchema` to find out which predicates are available — for example, `schema:relatedTo`, `schema:givenName`, `schema:homeLocation`.
+  </Step>
+
+  <Step title="Entity resolution">
+    The LLM calls `searchEntities` with `query: "Ethan"` and `query: "Gregory"` to resolve their canonical URIs.
+  </Step>
+
+  <Step title="Symbolic query">
+    The LLM calls `executeSparql` with a query that follows the relationship chain:
+
+    ```sparql
+    SELECT ?relation ?city WHERE {
+      <http://example.com/ethan> ?relation <http://example.com/gregory> .
+      OPTIONAL {
+        <http://example.com/gregory> <http://schema.org/homeLocation> ?location .
+        ?location <http://schema.org/name> ?city .
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Grounded response">
+    The graph returns exact, structured results. The LLM synthesises them into a natural language response that is factually grounded — not hallucinated.
+  </Step>
+</Steps>
+
+## Writing memory during a session
+
+Agents can also update the World as they learn new facts. This is what makes world memory genuinely persistent: the agent is not just reading a static graph — it is building and refining it over time.
+
+```typescript
+// The LLM calls executeSparql with an INSERT to record a new fact
+await sdk.worlds.sparql(worldId, `
+  INSERT DATA {
+    <http://example.com/ethan>
+      <http://schema.org/knows> <http://example.com/gregory> .
+  }
+`);
+```
+
+<Warning>
+  Only enable `write: true` on sources that the agent is authorised to modify. Read-only sources are protected at the tool level — the `executeSparql` tool will reject update queries before they reach the API.
+</Warning>
+
+## Multi-agent memory sharing
+
+Because a World is a standard RDF dataset exposed over a REST API, multiple agents can connect to the same World simultaneously. This enables:
+
+- **Shared context** — Agent A writes a fact; Agent B queries it immediately.
+- **Division of labour** — one agent specialises in ingestion, another in reasoning, another in reporting.
+- **Auditability** — every write is recorded in the World's append-only event log, accessible via `sdk.worlds.listLogs()`.
+
+```typescript
+// Agent A writes a discovery
+await sdk.worlds.sparql(sharedWorldId, `
+  INSERT DATA {
+    <http://example.com/project-alpha>
+      <http://example.com/status> "blocked" .
+  }
+`);
+
+// Agent B reads it in the next planning cycle
+const result = await sdk.worlds.sparql(sharedWorldId, `
+  SELECT ?project WHERE {
+    ?project <http://example.com/status> "blocked" .
+  }
+`);
+```
+
+## Completion
+
+You have completed the Worlds Academy foundation.
+
+<CardGroup cols={2}>
+  <Card title="World memory fundamentals" icon="brain" href="/academy/memory">
+    You understand why structured world memory outperforms flat retrieval for stateful agents.
+  </Card>
+  <Card title="Symbolic graph architecture" icon="diagram-nested" href="/academy/graphs">
+    You can design RDF knowledge graphs using triples, named graphs, and standard serialisation formats.
+  </Card>
+  <Card title="Logical reasoning with SPARQL" icon="magnifying-glass" href="/academy/sparql">
+    You can query and update world memory with precision using the full SPARQL 1.1 query language.
+  </Card>
+  <Card title="Neuro-symbolic integration" icon="robot" href="/academy/agents">
+    You can connect LLMs to structured memory using `@wazoo/worlds-ai-sdk` and build agents that reason over facts.
+  </Card>
+</CardGroup>
+
+<Note>
+  Ready to build? Start with the [quickstart guide](/overview/getting-started/quickstart) or explore the [agent integration tutorial](/overview/getting-started/agent-integration) for a hands-on walkthrough.
+</Note>

@@ -1,0 +1,179 @@
+---
+title: "Querying"
+description: "Execute SPARQL SELECT, INSERT, DELETE, CONSTRUCT, and ASK queries against your world's knowledge graph."
+---
+
+Worlds uses SPARQL 1.1 as its query language. Every world exposes a SPARQL endpoint at `/worlds/:id/sparql` that accepts both queries (SELECT, ASK, CONSTRUCT) and updates (INSERT DATA, DELETE DATA). The SDK wraps this endpoint via `sdk.worlds.sparql()`.
+
+<Info>
+The SPARQL endpoint is powered by the **Comunica** query engine operating over an in-memory N3 store. The store is loaded from the world's persisted N-Quads blob for each request.
+</Info>
+
+## SPARQL basics
+
+Every SPARQL statement operates on RDF triples of the form `subject predicate object`. Use `PREFIX` declarations to shorten IRIs.
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+const sdk = new WorldsSdk({
+  baseUrl: "http://localhost:8000",
+  apiKey: "your-api-key",
+});
+```
+
+## SELECT queries
+
+Retrieve variable bindings from the graph:
+
+```typescript
+const result = await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+
+  SELECT ?name WHERE {
+    <http://example.com/ethan> schema:relatedTo ?person .
+    ?person schema:givenName ?name .
+  }
+`);
+
+// result.results.bindings is an array of binding objects
+for (const binding of result.results.bindings) {
+  console.log(binding.name.value); // e.g., "Gregory"
+}
+```
+
+The response follows the [SPARQL 1.1 Query Results JSON Format](https://www.w3.org/TR/sparql11-results-json/):
+
+```json
+{
+  "head": { "vars": ["name"], "link": null },
+  "results": {
+    "bindings": [
+      { "name": { "type": "literal", "value": "Gregory" } }
+    ]
+  }
+}
+```
+
+## INSERT DATA
+
+Add new triples to the graph. SPARQL updates return `null` (HTTP 204):
+
+```typescript
+await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  INSERT DATA {
+    <http://example.com/ethan> schema:relatedTo <http://example.com/gregory> .
+    <http://example.com/gregory> schema:givenName "Gregory" .
+  }
+`);
+```
+
+## DELETE DATA
+
+Remove specific triples from the graph:
+
+```typescript
+await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  DELETE DATA {
+    <http://example.com/ethan> schema:relatedTo <http://example.com/gregory> .
+  }
+`);
+```
+
+## DELETE/INSERT (conditional update)
+
+Update a triple atomically using a `WHERE` clause to match the existing value:
+
+```typescript
+await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  DELETE {
+    <http://example.com/alice> schema:jobTitle ?oldTitle .
+  }
+  INSERT {
+    <http://example.com/alice> schema:jobTitle "Staff Engineer" .
+  }
+  WHERE {
+    <http://example.com/alice> schema:jobTitle ?oldTitle .
+  }
+`);
+```
+
+## ASK queries
+
+Check whether a pattern exists in the graph. Returns a boolean:
+
+```typescript
+const exists = await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  ASK {
+    <http://example.com/ethan> schema:relatedTo <http://example.com/gregory> .
+  }
+`);
+
+console.log(exists.boolean); // true or false
+```
+
+## CONSTRUCT queries
+
+Build a new RDF graph from query results. Returns `results.quads` rather than `results.bindings`:
+
+```typescript
+const graph = await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  CONSTRUCT {
+    ?person schema:knows ?related .
+  }
+  WHERE {
+    ?person schema:relatedTo ?related .
+  }
+`);
+
+for (const quad of graph.results.quads) {
+  console.log(quad.subject.value, quad.predicate.value, quad.object.value);
+}
+```
+
+<Note>
+CONSTRUCT and DESCRIBE queries return a `SparqlQuadsResults` object with a `results.quads` array. This is a Worlds extension to the standard SPARQL 1.1 JSON format, providing a consistent JSON representation for graph queries.
+</Note>
+
+## Named graph support
+
+Target specific named graphs using the `defaultGraphUris` or `namedGraphUris` options:
+
+```typescript
+const result = await sdk.worlds.sparql(
+  worldId,
+  `SELECT ?s ?p ?o WHERE { ?s ?p ?o . }`,
+  {
+    defaultGraphUris: ["http://example.com/graph/main"],
+    namedGraphUris: ["http://example.com/graph/schema"],
+  },
+);
+```
+
+## Result type reference
+
+| Query type | Return type | Key field |
+| :--- | :--- | :--- |
+| `SELECT` | `SparqlSelectResults` | `results.bindings` |
+| `ASK` | `SparqlAskResults` | `boolean` |
+| `CONSTRUCT` / `DESCRIBE` | `SparqlQuadsResults` | `results.quads` |
+| `INSERT` / `DELETE` / `UPDATE` | `null` (HTTP 204) | — |
+
+## Execution pipeline
+
+When you call `sdk.worlds.sparql()`, the server:
+
+1. Loads the world's N-Quads blob from its LibSQL database.
+2. Parses the blob into an in-memory N3 store via Comunica.
+3. Executes the SPARQL query or update against the store.
+4. For updates: skolemizes and hashes each quad, upserts triples, embeds literals for search, and persists the new blob.
+5. Appends a log entry to the world's `logs` table with the query (truncated to 1000 characters).
+
+<Warning>
+Only `GET` and `POST` are supported on the SPARQL endpoint. `PUT` and `DELETE` return `405 Method Not Allowed`. SPARQL updates must use `POST` with `Content-Type: application/sparql-update`.
+</Warning>

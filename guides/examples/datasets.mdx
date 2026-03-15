@@ -1,0 +1,195 @@
+---
+title: "Datasets"
+description: "Sample datasets and ontologies to bootstrap your worlds and test the Worlds Platform."
+---
+
+Jumpstart your testing and development with these curated datasets. Each dataset demonstrates different aspects of the Worlds Platform.
+
+## Solar system dataset
+
+The Worlds CLI ships with a solar system dataset in Turtle format. It demonstrates the Turtle syntax, `schema.org` predicates, and RDF class modeling.
+
+```turtle
+@prefix ex:     <http://example.org/solar-system/> .
+@prefix schema: <http://schema.org/> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+ex:Sun a schema:Star ;
+    rdfs:label "Sun" ;
+    schema:description "The star at the center of the Solar System." .
+
+ex:Mercury a ex:Planet ;
+    rdfs:label "Mercury" ;
+    schema:description "The smallest and innermost planet in the Solar System." ;
+    ex:order 1 ;
+    ex:orbits ex:Sun .
+
+ex:Venus a ex:Planet ;
+    rdfs:label "Venus" ;
+    schema:description "The second planet from the Sun and the hottest planet in our solar system." ;
+    ex:order 2 ;
+    ex:orbits ex:Sun .
+
+ex:Earth a ex:Planet ;
+    rdfs:label "Earth" ;
+    schema:description "The third planet from the Sun and the only astronomical object known to harbor life." ;
+    ex:order 3 ;
+    ex:orbits ex:Sun .
+
+ex:Mars a ex:Planet ;
+    rdfs:label "Mars" ;
+    schema:description "The fourth planet from the Sun and the second-smallest planet in the Solar System." ;
+    ex:order 4 ;
+    ex:orbits ex:Sun .
+
+ex:Jupiter a ex:Planet ;
+    rdfs:label "Jupiter" ;
+    schema:description "The fifth planet from the Sun and the largest in the Solar System." ;
+    ex:order 5 ;
+    ex:orbits ex:Sun .
+
+ex:Saturn a ex:Planet ;
+    rdfs:label "Saturn" ;
+    schema:description "The sixth planet from the Sun and the second-largest in the Solar System." ;
+    ex:order 6 ;
+    ex:orbits ex:Sun .
+
+ex:Uranus a ex:Planet ;
+    rdfs:label "Uranus" ;
+    schema:description "The seventh planet from the Sun and has the third-largest planetary radius." ;
+    ex:order 7 ;
+    ex:orbits ex:Sun .
+
+ex:Neptune a ex:Planet ;
+    rdfs:label "Neptune" ;
+    schema:description "The eighth and farthest-known Solar planet from the Sun." ;
+    ex:order 8 ;
+    ex:orbits ex:Sun .
+```
+
+### Import and query the solar system
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+import { readFile } from "node:fs/promises";
+
+const sdk = new WorldsSdk({
+  baseUrl: "http://localhost:8000",
+  apiKey: "your-api-key",
+});
+
+// Create a world for the dataset
+const world = await sdk.worlds.create({
+  slug: "solar-system",
+  label: "Solar System",
+});
+
+// Import the solar system Turtle
+const turtle = await readFile("./solar_system.ttl", "utf8");
+await sdk.worlds.import(world.id, turtle, { format: "turtle" });
+
+// Query: list all planets in order
+const planets = await sdk.worlds.sparql(world.id, `
+  PREFIX ex:     <http://example.org/solar-system/> .
+  PREFIX rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+
+  SELECT ?planet ?label ?order WHERE {
+    ?planet a ex:Planet ;
+            rdfs:label ?label ;
+            ex:order ?order .
+  }
+  ORDER BY ?order
+`);
+
+for (const b of planets.results.bindings) {
+  console.log(`${b.order.value}. ${b.label.value}`);
+}
+// 1. Mercury
+// 2. Venus
+// 3. Earth
+// ...
+
+// Semantic search: find planets with descriptions mentioning "largest"
+const large = await sdk.worlds.search(world.id, "largest planet in the Solar System", {
+  limit: 3,
+  types: ["http://example.org/solar-system/Planet"],
+});
+console.log(large[0].subject); // http://example.org/solar-system/Jupiter
+```
+
+## Personal memory schema
+
+A foundational ontology for personal assistant agents. Use this schema to give your agent memory of people, tasks, and projects.
+
+```turtle
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix schema: <http://schema.org/> .
+@prefix agent:  <http://example.com/agent/> .
+
+# Classes
+agent:Person a rdfs:Class ;
+  rdfs:label "Person" ;
+  rdfs:comment "A human known to the agent." .
+
+agent:Project a rdfs:Class ;
+  rdfs:label "Project" ;
+  rdfs:comment "A coordinated undertaking." .
+
+agent:Task a rdfs:Class ;
+  rdfs:label "Task" ;
+  rdfs:comment "An actionable work item." .
+
+# Properties
+schema:worksOn a rdf:Property ;
+  rdfs:domain agent:Person ;
+  rdfs:range agent:Project ;
+  rdfs:label "worksOn" .
+
+schema:assignedTo a rdf:Property ;
+  rdfs:domain agent:Task ;
+  rdfs:range agent:Person ;
+  rdfs:label "assignedTo" .
+
+schema:partOf a rdf:Property ;
+  rdfs:domain agent:Task ;
+  rdfs:range agent:Project ;
+  rdfs:label "partOf" .
+```
+
+## RDF/SPARQL benchmark patterns
+
+Standard SPARQL patterns useful for validating platform behavior:
+
+```typescript
+// Count all triples
+const count = await sdk.worlds.sparql(worldId, `
+  SELECT (COUNT(*) AS ?count) WHERE { ?s ?p ?o . }
+`);
+
+// List all distinct subjects
+const subjects = await sdk.worlds.sparql(worldId, `
+  SELECT DISTINCT ?subject WHERE { ?subject ?p ?o . }
+  LIMIT 50
+`);
+
+// List all distinct predicates in use
+const predicates = await sdk.worlds.sparql(worldId, `
+  SELECT DISTINCT ?predicate WHERE { ?s ?predicate ?o . }
+  ORDER BY ?predicate
+`);
+
+// List all distinct classes
+const classes = await sdk.worlds.sparql(worldId, `
+  SELECT DISTINCT ?class WHERE {
+    ?s a ?class .
+  }
+  ORDER BY ?class
+`);
+
+// Check existence of an entity
+const exists = await sdk.worlds.sparql(worldId, `
+  ASK { <http://example.com/alice> ?p ?o . }
+`);
+```

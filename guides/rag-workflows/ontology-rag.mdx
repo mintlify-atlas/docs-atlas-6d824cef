@@ -1,0 +1,144 @@
+---
+title: "Ontology RAG"
+description: "Use schema-aware queries to ground agents in well-defined ontologies and eliminate hallucinated property names."
+---
+
+Ontology RAG leverages predefined schemas to guide agentic reasoning and data retrieval. By introspecting the available classes and properties of a world before querying, agents operate within a well-defined conceptual boundary — using only terms that actually exist in the graph.
+
+## Why ontology-aware retrieval matters
+
+Without schema awareness, an agent might query for `schema:assignedTo` when the world only contains `schema:worksOn`, returning empty results and potentially hallucinating an answer. Ontology RAG prevents this by grounding the agent's vocabulary to what is actually defined.
+
+<CardGroup cols={3}>
+  <Card title="Zero hallucination" icon="shield-check">
+    Agents only use predicates and classes that actually exist in the world's schema.
+  </Card>
+  <Card title="Complex logic" icon="diagram-project">
+    Handle transitive relationships and inverse properties invisible to vector searches.
+  </Card>
+  <Card title="Deterministic reliability" icon="circle-check">
+    The agent's mental model matches the actual data structure.
+  </Card>
+</CardGroup>
+
+## Ontology discovery workflow
+
+<Steps>
+  <Step title="Retrieve available classes">
+    Query the world for all RDF types to understand what kinds of entities exist:
+
+    ```typescript
+    import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+    const sdk = new WorldsSdk({
+      baseUrl: "http://localhost:8000",
+      apiKey: "your-api-key",
+    });
+
+    const classes = await sdk.worlds.sparql(worldId, `
+      SELECT DISTINCT ?type WHERE {
+        ?subject a ?type .
+      }
+      ORDER BY ?type
+    `);
+    ```
+  </Step>
+  <Step title="Discover available predicates">
+    List all predicates in use to understand what relationships can be queried:
+
+    ```typescript
+    const predicates = await sdk.worlds.sparql(worldId, `
+      SELECT DISTINCT ?predicate WHERE {
+        ?s ?predicate ?o .
+      }
+      ORDER BY ?predicate
+    `);
+    ```
+  </Step>
+  <Step title="Map user intent to schema terms">
+    Use the discovered vocabulary to translate natural language requests into valid SPARQL.
+    Provide the schema terms as context to your LLM to generate grounded queries.
+  </Step>
+  <Step title="Execute grounded queries">
+    Run the ontology-guided SPARQL query with confidence that all terms exist in the data:
+
+    ```typescript
+    const result = await sdk.worlds.sparql(worldId, `
+      PREFIX schema: <http://schema.org/>
+      SELECT ?person ?project ?name WHERE {
+        ?person a schema:Person .
+        ?person schema:worksOn ?project .
+        ?project schema:name ?name .
+      }
+    `);
+    ```
+  </Step>
+</Steps>
+
+## Defining an ontology with SPARQL
+
+Import a schema into your world using `INSERT DATA` before storing instance data:
+
+```typescript
+await sdk.worlds.sparql(worldId, `
+  PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+  PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+  PREFIX schema: <http://schema.org/>
+
+  INSERT DATA {
+    schema:Person a rdfs:Class ;
+      rdfs:label "Person" ;
+      rdfs:comment "A human being." .
+
+    schema:Project a rdfs:Class ;
+      rdfs:label "Project" ;
+      rdfs:comment "A coordinated undertaking." .
+
+    schema:worksOn a rdf:Property ;
+      rdfs:label "worksOn" ;
+      rdfs:domain schema:Person ;
+      rdfs:range schema:Project .
+  }
+`);
+```
+
+## Alternatively: import a Turtle ontology
+
+For larger schemas, import a Turtle file directly:
+
+```typescript
+import { readFile } from "node:fs/promises";
+
+const turtleData = await readFile("./ontology.ttl", "utf8");
+await sdk.worlds.import(worldId, turtleData, { format: "turtle" });
+```
+
+## Traversing the ontology at query time
+
+Use `rdfs:subClassOf` and `rdfs:domain`/`rdfs:range` to traverse schema relationships:
+
+```typescript
+// Find all predicates valid for a given class
+const validPredicates = await sdk.worlds.sparql(worldId, `
+  PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+  PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+  PREFIX schema: <http://schema.org/>
+
+  SELECT ?predicate ?label WHERE {
+    ?predicate a rdf:Property ;
+               rdfs:domain schema:Person ;
+               rdfs:label ?label .
+  }
+`);
+```
+
+<Note>
+The `types` filter in `sdk.worlds.search()` lets you scope semantic search to a specific RDF class, complementing ontology-guided SPARQL with fuzzy concept retrieval:
+
+```typescript
+const results = await sdk.worlds.search(worldId, "project deadline", {
+  types: ["http://schema.org/Project"],
+  limit: 10,
+});
+```
+</Note>

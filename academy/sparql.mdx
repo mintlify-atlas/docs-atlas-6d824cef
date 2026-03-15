@@ -1,0 +1,264 @@
+---
+title: "Logical reasoning with SPARQL"
+description: "Master SPARQL 1.1 — the standard query language for graph data — using real Worlds SDK examples."
+---
+
+After [building a graph of triples](/academy/graphs), you need a way to retrieve and update that information with precision. That is what **SPARQL** is for.
+
+## What is SPARQL?
+
+**SPARQL** (SPARQL Protocol and RDF Query Language) is the W3C standard query language for RDF graphs. It is to knowledge graphs what SQL is to relational databases — but instead of rows and columns, SPARQL matches *patterns* across triples.
+
+SPARQL 1.1 includes two sub-languages:
+
+- **SPARQL Query** — read data from the graph (`SELECT`, `CONSTRUCT`, `ASK`, `DESCRIBE`)
+- **SPARQL Update** — write data to the graph (`INSERT DATA`, `DELETE DATA`, `INSERT/DELETE WHERE`)
+
+Worlds supports the full SPARQL 1.1 specification over its REST API.
+
+## Running queries with the Worlds SDK
+
+The `sdk.worlds.sparql()` method accepts any valid SPARQL query or update string and returns the results.
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+const sdk = new WorldsSdk({
+  baseUrl: "http://localhost:8000",
+  apiKey: "your-api-key",
+});
+
+const result = await sdk.worlds.sparql(worldId, `
+  SELECT ?name WHERE {
+    <http://example.com/ethan> <http://schema.org/relatedTo> ?person .
+    ?person <http://schema.org/givenName> ?name .
+  }
+`);
+```
+
+The result is a standard SPARQL JSON response containing `head` (variable names) and `results.bindings` (matched rows).
+
+## SPARQL query forms
+
+### SELECT — retrieve variable bindings
+
+`SELECT` is the most common query form. It returns a table of variable bindings for every pattern match in the graph.
+
+```sparql
+SELECT ?person ?name WHERE {
+  <http://example.com/ethan> <http://schema.org/relatedTo> ?person .
+  ?person <http://schema.org/givenName> ?name .
+}
+```
+
+**Breakdown:**
+
+1. `SELECT ?person ?name` — return these two variables for every match.
+2. `WHERE { ... }` — the graph pattern to match.
+3. `?person` — a variable that binds to any URI in that position.
+4. The pattern reads: "Find every entity that Ethan is related to, then find that entity's given name."
+
+#### Using LIMIT and ORDER BY
+
+```sparql
+SELECT ?name ?role WHERE {
+  ?person <http://schema.org/worksFor> <http://example.com/wazoo> .
+  ?person <http://schema.org/givenName> ?name .
+  ?person <http://example.com/role> ?role .
+}
+ORDER BY ?name
+LIMIT 10
+```
+
+### ASK — check for existence
+
+`ASK` returns a boolean — `true` if the pattern matches at least one result, `false` otherwise.
+
+```sparql
+ASK {
+  <http://example.com/ethan> <http://schema.org/worksFor> <http://example.com/wazoo> .
+}
+```
+
+This is useful for conditional logic in agent workflows: before adding a relationship, check whether it already exists.
+
+```typescript
+const result = await sdk.worlds.sparql(worldId, `
+  ASK {
+    <http://example.com/ethan> <http://schema.org/worksFor> <http://example.com/wazoo> .
+  }
+`);
+
+if (result?.boolean) {
+  console.log("Relationship already exists.");
+}
+```
+
+### CONSTRUCT — build a new graph
+
+`CONSTRUCT` returns a new RDF graph (a set of triples) generated from the pattern matches. Use it to transform or extract sub-graphs.
+
+```sparql
+CONSTRUCT {
+  ?person <http://example.com/memberOf> <http://example.com/wazoo> .
+}
+WHERE {
+  ?person <http://schema.org/worksFor> <http://example.com/wazoo> .
+}
+```
+
+### INSERT DATA — add triples
+
+`INSERT DATA` adds specific triples to the graph. This is a SPARQL Update operation.
+
+```sparql
+INSERT DATA {
+  <http://example.com/ethan> <http://schema.org/givenName> "Ethan" .
+  <http://example.com/ethan> <http://schema.org/worksFor>  <http://example.com/wazoo> .
+  <http://example.com/wazoo> <http://schema.org/name>      "Wazoo" .
+}
+```
+
+```typescript
+await sdk.worlds.sparql(worldId, `
+  INSERT DATA {
+    <http://example.com/ethan> <http://schema.org/givenName> "Ethan" .
+    <http://example.com/ethan> <http://schema.org/worksFor>  <http://example.com/wazoo> .
+  }
+`);
+// Returns null (HTTP 204 No Content) on success
+```
+
+### DELETE DATA — remove triples
+
+`DELETE DATA` removes specific triples from the graph. The triples must be stated exactly — no variables.
+
+```sparql
+DELETE DATA {
+  <http://example.com/ethan> <http://schema.org/worksFor> <http://example.com/wazoo> .
+}
+```
+
+### INSERT/DELETE WHERE — conditional updates
+
+Combine `DELETE` and `INSERT` with a `WHERE` clause to perform pattern-driven updates — the graph equivalent of `UPDATE ... SET ... WHERE`.
+
+```sparql
+DELETE {
+  ?person <http://example.com/role> ?oldRole .
+}
+INSERT {
+  ?person <http://example.com/role> "Senior Engineer" .
+}
+WHERE {
+  ?person <http://schema.org/givenName> "Ethan" .
+  ?person <http://example.com/role> ?oldRole .
+}
+```
+
+## Graph patterns, filters, and optionals
+
+### FILTER — constrain results
+
+`FILTER` removes bindings that do not satisfy a boolean expression.
+
+```sparql
+SELECT ?person ?age WHERE {
+  ?person <http://schema.org/age> ?age .
+  FILTER(?age >= 30)
+}
+```
+
+Common filter functions: `FILTER(regex(?name, "^E"))`, `FILTER(?date > "2024-01-01"^^xsd:date)`, `FILTER(lang(?label) = "en")`.
+
+### OPTIONAL — left joins
+
+`OPTIONAL` includes results even when the optional pattern does not match — equivalent to a SQL LEFT JOIN.
+
+```sparql
+SELECT ?person ?name ?email WHERE {
+  ?person <http://schema.org/worksFor> <http://example.com/wazoo> .
+  ?person <http://schema.org/givenName> ?name .
+  OPTIONAL {
+    ?person <http://schema.org/email> ?email .
+  }
+}
+```
+
+Here, every Wazoo employee is returned. Those without an email address in the graph simply have `?email` unbound.
+
+### UNION — alternative patterns
+
+`UNION` matches either of two graph patterns.
+
+```sparql
+SELECT ?contact WHERE {
+  { ?contact a <http://schema.org/Person> . }
+  UNION
+  { ?contact a <http://schema.org/Organization> . }
+}
+```
+
+## SPARQL vs. vector search
+
+Vector search is effective for finding *similar* content based on embedding proximity. SPARQL is designed for **exact retrieval** and **symbolic reasoning**.
+
+| Task | Vector search | SPARQL |
+| :--- | :--- | :--- |
+| "Find documents about Seattle" | Excellent | Possible but not the right tool |
+| "Who is Gregory's manager?" | Approximate — may return wrong person | Exact — follows `hasManager` directly |
+| "List all employees hired after 2023" | Unreliable | Precise — filters on typed date literals |
+| "Does Ethan know Gregory?" | No structured answer | `ASK` returns `true` or `false` |
+| "Update Ethan's role" | Not possible | `DELETE/INSERT WHERE` in one operation |
+
+<Warning>
+  Vector search cannot distinguish between "Alice manages Bob" and "Bob manages Alice" if both appear in similar document contexts. SPARQL follows the directed predicate and returns the exact answer.
+</Warning>
+
+## Targeting named graphs
+
+When your World contains named graphs, you can scope queries to a specific graph or query across all graphs.
+
+```sparql
+-- Query a specific named graph
+SELECT ?name WHERE {
+  GRAPH <http://example.com/graphs/hr> {
+    ?person <http://schema.org/givenName> ?name .
+  }
+}
+```
+
+You can also pass `defaultGraphUris` and `namedGraphUris` as options to the SDK method to control graph selection at the protocol level.
+
+```typescript
+const result = await sdk.worlds.sparql(
+  worldId,
+  `SELECT ?name WHERE { ?person <http://schema.org/givenName> ?name . }`,
+  {
+    defaultGraphUris: ["http://example.com/graphs/hr"],
+  }
+);
+```
+
+## Federation
+
+SPARQL 1.1 Federation allows a single query to reach across multiple SPARQL endpoints using the `SERVICE` keyword. This is advanced usage but worth knowing: Worlds endpoints are standard SPARQL endpoints and are fully federation-compatible.
+
+```sparql
+SELECT ?name ?label WHERE {
+  ?person <http://schema.org/givenName> ?name .
+  SERVICE <http://other-endpoint/sparql> {
+    ?person <http://www.w3.org/2000/01/rdf-schema#label> ?label .
+  }
+}
+```
+
+## Practice
+
+You can run SPARQL queries interactively in the [Worlds Console](https://console.wazoo.dev) or via the [CLI](/reference/cli). Both tools provide query history, syntax highlighting, and result formatting.
+
+<Tip>
+  Start with `SELECT` and `INSERT DATA` queries to build confidence. Once you are comfortable with pattern matching and variable binding, move on to `OPTIONAL`, `FILTER`, and conditional `DELETE/INSERT WHERE` updates.
+</Tip>
+
+[Continue to neuro-symbolic agent integration](/academy/agents)

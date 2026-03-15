@@ -1,0 +1,91 @@
+---
+title: "World memory fundamentals"
+description: "Understand what world memory is, how it differs from traditional RAG, and why structured symbolic memory gives AI agents a decisive advantage."
+---
+
+This is the first module in the [Worlds Academy](/academy). You will learn what world memory is, why traditional RAG falls short for stateful agents, and how Worlds organises information to enable genuine persistent reasoning.
+
+## Beyond retrieval
+
+Most AI applications rely on **Retrieval-Augmented Generation (RAG)**. In a RAG pipeline, the agent searches for relevant documents, reads them, and generates an answer. The process looks like consulting a bookshelf: useful for one-off lookups, but fundamentally stateless.
+
+**Worlds provides a stateful memory layer instead.**
+
+A "World" is a persistent, structured environment. Rather than storing flat text documents and floating embeddings, Worlds organises information as a **knowledge graph** — a web of entities connected by typed, queryable relationships.
+
+### Functional comparison
+
+| Feature | Traditional RAG | Worlds Platform |
+| :--- | :--- | :--- |
+| **Data structure** | Flat text / embeddings | Structured graph (RDF) |
+| **Persistence** | Session-based or static | Truly persistent and stateful |
+| **Reasoning** | Vector similarity | Symbolic logic (SPARQL) |
+| **Interaction** | Read-only retrieval | Dynamic reads and writes |
+| **Precision** | Approximate (nearest neighbour) | Exact (pattern matching) |
+| **Multi-hop queries** | Requires re-retrieval | Native graph traversal |
+
+<Tip>
+  RAG is excellent for surfacing relevant passages from large document collections. World memory is better when your agent needs to maintain structured facts, follow precise relationships, and update its knowledge over time.
+</Tip>
+
+## Symbolic vs. semantic memory
+
+Understanding the distinction between symbolic and semantic memory is central to the Worlds philosophy.
+
+**Semantic memory** (what RAG provides) is associative — it finds content that is *similar* to a query. Ask for "project deadlines" and the vector store returns documents that discuss schedules, timelines, or due dates.
+
+**Symbolic memory** (what Worlds provides) is relational — it finds content that *matches a logical pattern*. Ask "who manages project Alpha and what is their email?" and SPARQL traverses the graph directly to the precise answer.
+
+Worlds does not discard semantic memory. The platform supports vector indexing for fuzzy search alongside the symbolic graph for precise reasoning. You get both.
+
+## How Worlds stores facts as RDF triples
+
+Every piece of information in a World is stored as a **triple**: a Subject-Predicate-Object statement.
+
+```
+<http://example.com/ethan>  <http://schema.org/worksFor>  <http://example.com/wazoo> .
+<http://example.com/wazoo>  <http://schema.org/name>      "Wazoo" .
+```
+
+These triples accumulate into a graph that the agent can query with exact symbolic logic. The [graphs module](/academy/graphs) explains this structure in detail.
+
+## Why "Worlds"?
+
+The term "Worlds" represents the environment in which your AI agent operates. Just as humans understand their surroundings through relationships — identity, location, ownership, causality — an AI agent uses a World to maintain a consistent, structured model of its context.
+
+## The memory stack
+
+Worlds mirrors the layers of human memory to provide a complete stack for autonomous agents.
+
+| Memory type | Agent perspective | Worlds implementation |
+| :--- | :--- | :--- |
+| **Semantic** | What it **knows** | **RDF store** — structured facts and reasoning |
+| **Episodic** | What it **did** | **Append-only log** — temporal history of events |
+| **Working** | What it is **thinking** | **Context window** — live distillation of current focus |
+| **Procedural** | What it **can do** | **Tools** — skills for graph and agent operations |
+| **Sensory** | What it **perceives** | **Ingestion** — raw data streams and vector indexing |
+
+Each layer plays a distinct role. The **semantic layer** (the RDF store) is the foundation because it holds durable, structured facts that persist across sessions and remain queryable with precision.
+
+## Persistent memory across sessions
+
+With RAG, the agent's "memory" is reconstructed on every request from a static document store. If the document store does not change, the agent cannot update its understanding based on what happened in previous sessions.
+
+With Worlds, the knowledge graph is the source of truth. An agent can:
+
+- **Read** facts from previous sessions via SPARQL queries
+- **Write** new facts as they are discovered using SPARQL updates
+- **Delete** stale facts when they are superseded
+- **Share** memory with other agents that connect to the same World
+
+This makes Worlds-backed agents genuinely stateful: each session begins where the last one left off.
+
+<Note>
+  Persistence is not just convenience — it is architecturally necessary for agents that operate over long time horizons, collaborate with other agents, or need to maintain consistent representations of evolving real-world state.
+</Note>
+
+## Next steps
+
+You now understand why structured world memory outperforms flat retrieval for stateful agents. In the next module, you will learn how knowledge is structured inside a World.
+
+[Continue to symbolic graph architecture](/academy/graphs)

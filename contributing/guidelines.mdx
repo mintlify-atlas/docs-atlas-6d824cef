@@ -1,0 +1,121 @@
+---
+title: "Contributing guidelines"
+description: "How to report issues, submit pull requests, and meet code quality standards for the Worlds Platform."
+---
+
+The Worlds Platform welcomes contributions from developers of all skill levels. This page explains the processes for reporting issues and submitting pull requests.
+
+## Reporting issues
+
+Before opening a new issue, search [GitHub Issues](https://github.com/wazootech/worlds/issues) to check whether the problem has already been reported.
+
+When opening a new issue:
+
+- **Use a clear title**: Summarize the problem or request in one sentence.
+- **Provide context**: Describe what you were trying to accomplish and what happened instead.
+- **Include steps to reproduce**: For bugs, provide a minimal, reproducible example.
+- **Attach logs**: Include relevant error messages or console output.
+
+## Pull requests
+
+The project follows a standard GitHub flow for contributions.
+
+<Steps>
+  <Step title="Fork the repository">
+    Create your own fork of the `worlds` repository on GitHub.
+  </Step>
+
+  <Step title="Create a branch">
+    Use a descriptive branch name that reflects the scope of your change:
+
+    ```bash
+    git checkout -b feat/sparql-optimizer
+    # or
+    git checkout -b fix/auth-leak
+    ```
+
+    Use the `feat/` prefix for new features and `fix/` for bug fixes.
+  </Step>
+
+  <Step title="Make your changes">
+    Follow the [coding standards](#coding-standards) below. Write TypeScript for all new code. Add tests for any new functionality.
+  </Step>
+
+  <Step title="Run the pre-commit check">
+    Before pushing, verify all checks pass locally:
+
+    ```bash
+    deno task precommit
+    ```
+
+    This runs formatting, linting, type-checking, tests, docs pre-commit, console pre-commit, and a dry publish in sequence.
+  </Step>
+
+  <Step title="Submit the PR">
+    Push your branch and open a pull request against `main`. Provide a clear description of your changes and link any related issues.
+  </Step>
+</Steps>
+
+### Review process
+
+All PRs require at least one maintainer review before merging. Maintainers may request changes to ensure code quality, performance, and architectural alignment. Once approved, changes are merged into `main`.
+
+<Note>
+  The CI pipeline runs format checks, linting, and all tests automatically on every PR targeting `main`. Your PR must pass all checks before it can be reviewed.
+</Note>
+
+## Coding standards
+
+### TypeScript
+
+- Use **TypeScript** for all new code in the monorepo.
+- Follow the existing code style and patterns (Deno defaults).
+- Add JSDoc comments to all public functions, classes, and interfaces.
+- Ensure all new features are covered by tests.
+
+### Formatting and linting
+
+The project uses `deno fmt` for consistent formatting and `deno lint` for static analysis. Run both before committing:
+
+<CodeGroup>
+
+```bash Format
+deno task fmt
+```
+
+```bash Lint
+deno task lint
+```
+
+```bash Type-check
+deno task check
+```
+
+</CodeGroup>
+
+The CI pipeline runs `deno fmt` with `git diff-index --quiet HEAD` to verify no formatting changes are unstaged. Format your code before pushing.
+
+### Commit messages
+
+Write clear, concise commit messages that describe the intent of the change:
+
+- Start with a verb in the imperative mood: `Add`, `Fix`, `Update`, `Remove`.
+- Keep the subject line under 72 characters.
+- Reference related issues in the body when relevant: `Closes #123`.
+
+**Examples:**
+
+```text
+Add SPARQL federation support to world queries
+
+Fix authentication token leak in route middleware
+
+Update SDK to support Deno 2.x module resolution
+```
+
+### Testing requirements
+
+- All new features must include corresponding tests.
+- Bug fixes should include a regression test.
+- Run the full test suite with `deno task test` before submitting a PR.
+- Use `TestContext` and `MemoryDatabaseManager` for isolated service and route tests — do not rely on external databases in unit tests.

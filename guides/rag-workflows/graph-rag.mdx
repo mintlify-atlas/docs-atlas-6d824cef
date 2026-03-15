@@ -1,0 +1,139 @@
+---
+title: "Graph RAG"
+description: "Transition from stateless text chunks to stateful agent memory using Worlds knowledge graphs."
+---
+
+Standard retrieval-augmented generation (RAG) often struggles with evolving facts and complex relational queries. **Graph RAG** in Worlds addresses these limitations by maintaining a stateful, structured memory backed by RDF triples.
+
+## The problem with stateless RAG
+
+In traditional RAG, you chunk and embed text for retrieval based on semantic similarity. This works for static information but fails when facts change or when relationships between entities matter.
+
+### Scenario: The evolving fact
+
+1. **Monday:** "I am working on Project Apollo."
+2. **Wednesday:** "I am pausing Apollo to focus on Project Hermes."
+3. **Friday:** "What am I working on?"
+
+A traditional RAG system retrieves both chunks, forcing the LLM to resolve the contradiction through heuristics. As your dataset grows, retrieval becomes increasingly noisy.
+
+### Comparison: Traditional RAG vs. Worlds
+
+| Feature | Traditional RAG | Worlds (graph memory) |
+| :--- | :--- | :--- |
+| **Search** | Semantic similarity | Hybrid (semantic + relational) |
+| **State** | Stateless | Stateful (resolves contradictions) |
+| **Inference** | Hallucination-prone | Deterministic reasoning |
+| **Structure** | Unstructured chunks | Knowledge primitives (triples) |
+
+## Worlds solution: stateful memory
+
+Worlds maintains a **living knowledge graph**. Instead of storing raw text, it extracts meaning as **triples** (subject → predicate → object). When facts change, you update the specific triple in the graph — resolving contradictions at the data layer rather than relying on probabilistic LLM reasoning.
+
+## Implementing graph RAG
+
+### Step 1: Write facts as triples
+
+Insert structured facts into your world using SPARQL `INSERT DATA`:
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+const sdk = new WorldsSdk({
+  baseUrl: "http://localhost:8000",
+  apiKey: "your-api-key",
+});
+
+const worldId = "your-world-id";
+
+// Record current work assignment
+await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  INSERT DATA {
+    <http://example.com/ethan> schema:worksOn <http://example.com/project-hermes> .
+    <http://example.com/project-hermes> schema:name "Project Hermes" .
+  }
+`);
+```
+
+### Step 2: Update facts deterministically
+
+When facts change, delete the old triple and insert the new one:
+
+```typescript
+await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  DELETE DATA {
+    <http://example.com/ethan> schema:worksOn <http://example.com/project-apollo> .
+  }
+`);
+
+await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  INSERT DATA {
+    <http://example.com/ethan> schema:worksOn <http://example.com/project-hermes> .
+  }
+`);
+```
+
+### Step 3: Retrieve context for generation
+
+Query the graph to get verified, current facts before calling your LLM:
+
+```typescript
+const result = await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  SELECT ?project ?name WHERE {
+    <http://example.com/ethan> schema:worksOn ?project .
+    ?project schema:name ?name .
+  }
+`);
+
+// result.results.bindings contains the verified facts
+const context = result.results.bindings
+  .map((b) => `Ethan is working on: ${b.name.value}`)
+  .join("\n");
+```
+
+### Step 4: Inject context into LLM prompt
+
+```typescript
+const systemPrompt = `
+You are a deterministic agent connected to a Worlds knowledge graph.
+When answering user queries:
+1. Use the retrieved relationships below — they represent the CURRENT, VERIFIED state.
+2. Respond strictly using the relationships extracted, overriding any probabilistic intuition.
+
+Current knowledge context:
+${context}
+`;
+```
+
+<Note>
+For ambiguous queries where SPARQL alone may be insufficient, combine graph retrieval with semantic search using `sdk.worlds.search()` to cover both structured and unstructured knowledge.
+</Note>
+
+## Hybrid retrieval pattern
+
+For richer context, combine SPARQL for structured facts with semantic search for descriptive content:
+
+```typescript
+// Structured: get exact relationships
+const sparqlContext = await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  SELECT ?s ?p ?o WHERE {
+    <http://example.com/ethan> ?p ?o .
+  }
+`);
+
+// Semantic: find related concepts by meaning
+const searchContext = await sdk.worlds.search(
+  worldId,
+  "current project assignments and status",
+  { limit: 10, subjects: ["http://example.com/ethan"] },
+);
+```
+
+<Tip>
+Use SPARQL for fact retrieval when you know the exact predicate, and semantic search when the user's query is open-ended. Combining both gives your agent the widest possible context grounding.
+</Tip>

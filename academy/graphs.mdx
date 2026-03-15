@@ -1,0 +1,187 @@
+---
+title: "Symbolic graph architecture"
+description: "Learn how knowledge is structured in Worlds using RDF triples, named graphs, and standard serialisation formats."
+---
+
+In the [previous module](/academy/memory), you learned that a World is a stateful knowledge graph. This module explains exactly how that graph is built — starting from the atomic unit of knowledge and scaling up to named graphs and RDF serialisation formats.
+
+## What is RDF?
+
+**RDF (Resource Description Framework)** is the W3C standard data model for knowledge graphs. Worlds uses RDF as its storage and query layer, which means every fact you store is interoperable with the broader semantic web ecosystem.
+
+In RDF, everything is identified by a **URI (Uniform Resource Identifier)**. This is what makes the graph globally unambiguous: two different systems referring to `<http://schema.org/Person>` are talking about exactly the same concept.
+
+## The triple: the atomic unit of knowledge
+
+Every piece of information in a World is stored as a **triple** (also called a statement or triplet). A triple has exactly three components:
+
+| Part | Role | Example |
+| :--- | :--- | :--- |
+| **Subject** | The entity being described | `<http://example.com/ethan>` |
+| **Predicate** | The relationship or property | `<http://schema.org/worksFor>` |
+| **Object** | The value or related entity | `<http://example.com/wazoo>` |
+
+Together, they form a clear semantic statement: **Ethan works for Wazoo.**
+
+```
+<http://example.com/ethan>  <http://schema.org/worksFor>  <http://example.com/wazoo> .
+```
+
+The trailing `.` is the standard triple terminator in RDF serialisations.
+
+### Subjects, predicates, and objects in detail
+
+<AccordionGroup>
+  <Accordion title="Subjects">
+    The subject is always a URI — a globally unique identifier for the entity being described. Subjects can be URIs (named resources) or blank nodes (anonymous resources without a global identifier).
+
+    ```
+    <http://example.com/ethan>   # URI subject
+    _:b0                          # blank node subject
+    ```
+  </Accordion>
+
+  <Accordion title="Predicates">
+    The predicate is always a URI. It names the relationship between the subject and the object. Predicates come from vocabularies — shared definitions for common relationships.
+
+    Common vocabularies used in Worlds:
+    - `schema.org` — general-purpose entities and properties
+    - `rdf:type` — asserts that a resource is an instance of a class
+    - `owl:sameAs` — asserts that two URIs refer to the same entity
+  </Accordion>
+
+  <Accordion title="Objects">
+    Objects can be either a URI (another entity in the graph) or a **literal** (a raw value such as a string, number, or date).
+
+    ```
+    <http://example.com/wazoo>   # URI object (another entity)
+    "Wazoo"                       # plain string literal
+    "Wazoo"@en                    # language-tagged string
+    "2024-01-01"^^xsd:date        # typed literal (a date)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Graph formation
+
+Triples are powerful because they compose. Each new triple adds a fact to the graph and can connect entities that were previously isolated.
+
+Consider these three triples:
+
+```turtle
+<http://example.com/ethan>  <http://schema.org/worksFor>     <http://example.com/wazoo> .
+<http://example.com/wazoo>  <http://schema.org/location>     <http://example.com/seattle> .
+<http://example.com/greg>   <http://schema.org/worksFor>     <http://example.com/wazoo> .
+```
+
+From these three statements, an agent can infer that:
+- Ethan and Greg both work for Wazoo.
+- Wazoo is located in Seattle.
+- Ethan and Greg therefore share the same work location.
+
+No additional data was stored to support that last inference — it emerged from the graph structure itself. This is the power of symbolic reasoning over flat retrieval.
+
+## Named graphs
+
+In standard RDF, triples live in a single default graph. **Named graphs** (part of the RDF Dataset specification) allow you to organise triples into labelled subgraphs within the same store.
+
+A triple in a named graph becomes a **quad** (four components):
+
+```
+Subject  Predicate  Object  GraphName
+```
+
+For example:
+
+```
+<http://example.com/ethan>  <http://schema.org/worksFor>  <http://example.com/wazoo>  <http://example.com/graphs/hr> .
+```
+
+Worlds uses named graphs to isolate data by source, topic, or access control boundary. When you query with SPARQL, you can target specific named graphs or query across all of them.
+
+## RDF serialisation formats
+
+RDF data is serialised into text for storage and transfer. Worlds supports the following formats when importing and exporting data.
+
+<Tabs>
+  <Tab title="N-Quads">
+    N-Quads is the default format for Worlds imports. Each line is a single quad (triple + graph name). It is machine-friendly and streamable.
+
+    ```nquads
+    <http://example.com/ethan> <http://schema.org/worksFor> <http://example.com/wazoo> <http://example.com/graphs/hr> .
+    <http://example.com/wazoo> <http://schema.org/name> "Wazoo" <http://example.com/graphs/hr> .
+    ```
+  </Tab>
+
+  <Tab title="Turtle">
+    Turtle is the most human-readable RDF format. It supports prefix declarations to shorten URIs and allows multiple predicates per subject with `;`.
+
+    ```turtle
+    @prefix schema: <http://schema.org/> .
+    @prefix ex:     <http://example.com/> .
+
+    ex:ethan
+        schema:worksFor ex:wazoo ;
+        schema:givenName "Ethan" .
+
+    ex:wazoo
+        schema:name "Wazoo" ;
+        schema:location ex:seattle .
+    ```
+  </Tab>
+
+  <Tab title="N-Triples">
+    N-Triples is a strict subset of Turtle. Every triple is on its own line with full URIs — no prefixes, no shortcuts. Ideal for bulk loading and interoperability.
+
+    ```ntriples
+    <http://example.com/ethan> <http://schema.org/worksFor> <http://example.com/wazoo> .
+    <http://example.com/wazoo> <http://schema.org/name> "Wazoo" .
+    ```
+  </Tab>
+
+  <Tab title="N3">
+    Notation3 (N3) is a superset of Turtle that adds support for rules and logical formulas. Worlds accepts N3 for import when your data source produces it.
+
+    ```n3
+    @prefix schema: <http://schema.org/> .
+    @prefix ex:     <http://example.com/> .
+
+    { ex:ethan schema:worksFor ?org . ?org schema:location ?city . }
+      => { ex:ethan schema:workCity ?city . } .
+    ```
+  </Tab>
+</Tabs>
+
+## How Worlds organises triples into "worlds"
+
+A **World** in the Worlds Platform is an isolated RDF dataset — a named container for a graph of triples. Each World has its own SPARQL endpoint, access controls, import/export surface, and event log.
+
+You can think of a World as a database for a single agent, team, or domain of knowledge. Multiple agents can share a World (giving them shared memory), or each agent can maintain its own private World.
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+const sdk = new WorldsSdk({
+  baseUrl: "http://localhost:8000",
+  apiKey: "your-api-key",
+});
+
+// Create a new isolated knowledge base
+const world = await sdk.worlds.create({ name: "team-memory" });
+
+// Import Turtle data into it
+await sdk.worlds.import(world.id, turtleData, { format: "turtle" });
+
+// Export the entire world as N-Quads
+const buffer = await sdk.worlds.export(world.id, { format: "n-quads" });
+```
+
+## Summary
+
+- **RDF** is the W3C standard data model underlying all Worlds knowledge graphs.
+- Every fact is a **triple**: Subject, Predicate, Object — all identified by URIs.
+- **Named graphs** group triples into labelled subgraphs within a dataset.
+- Worlds accepts **N-Quads, Turtle, N-Triples, and N3** for import.
+- A **World** is an isolated RDF dataset with its own endpoint, controls, and log.
+
+[Continue to logical reasoning with SPARQL](/academy/sparql)

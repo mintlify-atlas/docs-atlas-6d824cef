@@ -1,0 +1,133 @@
+---
+title: "Request flow"
+description: "How incoming requests are routed, authorized, validated, executed, and returned by the Worlds API server."
+---
+
+The Worlds API Server is built on [Deno](https://deno.com) for secure, edge-ready execution with web-standard APIs. Every request follows a deterministic lifecycle before a response is returned.
+
+## Request lifecycle
+
+<Steps>
+  <Step title="Routing">
+    The server matches the incoming request's URL path and HTTP method against registered route handlers. Routes follow REST conventions:
+
+    | Pattern | Handler |
+    | :------ | :------ |
+    | `GET /worlds` | List worlds |
+    | `POST /worlds` | Create world |
+    | `GET /worlds/:world` | Get world by ID/slug |
+    | `PUT /worlds/:world` | Update world |
+    | `DELETE /worlds/:world` | Soft-delete world |
+    | `GET /worlds/:world/sparql` | SPARQL service description or query |
+    | `POST /worlds/:world/sparql` | Execute SPARQL query or update |
+    | `GET /worlds/:world/search` | Semantic search |
+    | `POST /worlds/:world/import` | Import RDF data |
+    | `GET /worlds/:world/export` | Export RDF data |
+    | `GET /worlds/:world/logs` | List operation logs |
+
+    If no route matches, the server returns `404 Not Found`. If a route matches but the method is not allowed, it returns `405 Method Not Allowed`.
+  </Step>
+
+  <Step title="Authorization">
+    For every protected endpoint, the server reads the `Authorization` header and validates the Bearer token against the configured `WORLDS_API_KEY`.
+
+    ```typescript
+    // Middleware pseudocode
+    if (!appContext.apiKey) {
+      return { admin: true }; // Unprotected mode
+    }
+    const token = request.headers.get("Authorization")?.slice("Bearer ".length);
+    return { admin: token === appContext.apiKey };
+    ```
+
+    - If `WORLDS_API_KEY` is not configured, the server runs in **unprotected mode** and grants admin access to all requests.
+    - If the token is missing or does not match, the handler returns `401 Unauthorized` or `403 Forbidden`.
+
+    See the [authentication guide](/reference/api-basics/authentication) for details.
+  </Step>
+
+  <Step title="Validation">
+    Input data — both request body fields and query parameters — is validated using strict [Zod](https://zod.dev) schemas defined in the SDK package.
+
+    | Input type | Schemas used |
+    | :--------- | :----------- |
+    | Create world body | `createWorldParamsSchema` |
+    | Update world body | `updateWorldParamsSchema` |
+    | List pagination | `paginationParamsSchema` |
+    | Search limit | `limitParamSchema` |
+    | SPARQL results | `executeSparqlOutputSchema` |
+
+    If validation fails, the handler returns `400 Bad Request` with a descriptive error message. This ensures type-safety and data integrity before any database or graph operation is attempted.
+  </Step>
+
+  <Step title="Execution">
+    The server performs the requested operation. For world-scoped requests, it:
+
+    1. Resolves the world record from the primary database using the ID or slug.
+    2. Looks up the world-specific database instance via the `DatabaseManager`.
+    3. Runs the operation (SPARQL, search, import/export, CRUD) against the correct knowledge graph.
+
+    For **SPARQL updates** and **imports**, the server also:
+    - Applies RDF patches to the semantic search index.
+    - Persists the updated graph blob.
+    - Writes a structured log entry (message, level, metadata) to the world's log table.
+
+    For **SPARQL queries** and **searches**, the server writes a log entry recording the query text and parameters.
+  </Step>
+
+  <Step title="Response">
+    The server serializes the result and returns an HTTP response:
+
+    | Operation type | Response |
+    | :------------- | :------- |
+    | Read (GET) | `200 OK` with JSON body and optional `ETag` header for caching. |
+    | Create (POST) | `201 Created` with the created resource as JSON. |
+    | Update (PUT) | `204 No Content`, no body. |
+    | Delete (DELETE) | `204 No Content`, no body. |
+    | SPARQL query | `200 OK` with `application/sparql-results+json` body. |
+    | SPARQL update | `204 No Content`, no body. |
+    | Export | `200 OK` with the RDF body and format-specific `Content-Type`. |
+    | Error | `4xx` or `5xx` with `{ "error": "<message>" }` JSON body. |
+
+    GET responses include an `ETag` header derived from the response body. Clients can send `If-None-Match` to receive `304 Not Modified` when data has not changed.
+  </Step>
+</Steps>
+
+---
+
+## Error format
+
+All error responses follow a consistent JSON envelope:
+
+```json
+{
+  "error": "Human-readable error message"
+}
+```
+
+| Status | When it occurs |
+| :----- | :------------- |
+| `400 Bad Request` | Invalid parameters, malformed JSON, or invalid RDF/SPARQL syntax. |
+| `401 Unauthorized` | Missing or invalid `Authorization` header. |
+| `403 Forbidden` | Valid token but insufficient privileges for the operation. |
+| `404 Not Found` | World does not exist or has been soft-deleted. |
+| `405 Method Not Allowed` | HTTP method not supported on this endpoint. |
+| `409 Conflict` | Resource conflict, such as a duplicate world slug. |
+| `415 Unsupported Media Type` | Unrecognized `Content-Type` on the SPARQL endpoint. |
+| `500 Internal Server Error` | Unexpected server-side failure. |
+
+---
+
+## Caching
+
+Read endpoints (`GET /worlds`, `GET /worlds/:world`, `GET /worlds/:world/export`) compute an `ETag` from the response body and support conditional requests:
+
+```http
+# Client sends with cached ETag
+If-None-Match: "<etag-value>"
+
+# Server responds when data is unchanged
+HTTP/1.1 304 Not Modified
+```
+
+This allows clients and CDNs to cache world data efficiently without polling for changes.

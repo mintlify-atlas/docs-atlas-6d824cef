@@ -1,0 +1,98 @@
+---
+title: "Worlds Academy"
+description: "Master stateful AI memory and neuro-symbolic world models — from fundamentals to production agents."
+---
+
+Welcome to the Worlds Academy. This curriculum takes you from the fundamentals of knowledge graphs and symbolic reasoning through to building advanced, stateful AI agents that maintain persistent memory across sessions.
+
+<Note>
+  **Core objective**
+
+  By the end of this path, you will understand how to bridge Large Language Models with structured knowledge graphs, giving your agents persistent, queryable, stateful memory that far outperforms traditional RAG.
+</Note>
+
+## What you will learn
+
+The Academy covers four tightly sequenced modules. Each one builds on the last, so work through them in order.
+
+<CardGroup cols={2}>
+  <Card title="World memory fundamentals" icon="brain" href="/academy/memory">
+    Understand what world memory is, how it differs from vector RAG, and why structured symbolic memory is the foundation for intelligent agents.
+  </Card>
+  <Card title="Symbolic graph architecture" icon="diagram-nested" href="/academy/graphs">
+    Learn how every piece of knowledge in a World is expressed as a Subject-Predicate-Object triplet, and how those triplets form a navigable knowledge graph.
+  </Card>
+  <Card title="Logical reasoning with SPARQL" icon="magnifying-glass" href="/academy/sparql">
+    Master SPARQL 1.1 — the standard query language for graph data. Write SELECT, INSERT, DELETE, CONSTRUCT, and ASK queries against your world memory.
+  </Card>
+  <Card title="Neuro-symbolic agent integration" icon="robot" href="/academy/agents">
+    Connect an LLM to its world memory using `@wazoo/worlds-ai-sdk`. Build agents that read, write, and reason over structured knowledge in real time.
+  </Card>
+</CardGroup>
+
+## Learning path
+
+Follow these steps in order to build your foundation in the Worlds ecosystem.
+
+<Steps>
+  <Step title="World memory fundamentals">
+    Understand the concept of world memory and how it differs from traditional RAG. Learn why stateful environments are essential for intelligent agents and how Worlds mirrors the human memory stack.
+
+    [Start module](/academy/memory)
+  </Step>
+
+  <Step title="Symbolic graph architecture">
+    Learn how to structure knowledge using Subject-Predicate-Object triplets. Master the atomic unit of knowledge in the Worlds graph, and understand how RDF, named graphs, and serialisation formats like Turtle and N-Quads work.
+
+    [Start module](/academy/graphs)
+  </Step>
+
+  <Step title="Logical reasoning with SPARQL">
+    Master the basics of querying your world memory with symbolic logic. Learn to extract exact facts, follow relationships, filter results, and update the graph — all through SPARQL 1.1.
+
+    [Start module](/academy/sparql)
+  </Step>
+
+  <Step title="Neuro-symbolic agent integration">
+    Connect your AI agent to its memory using neuro-symbolic tool-calling. Build an agent that can read and write to its own world model, share memory across multiple agents, and close the "Reasoning Gap" that defeats pure vector RAG.
+
+    [Start module](/academy/agents)
+  </Step>
+</Steps>
+
+## Prerequisites
+
+<AccordionGroup>
+  <Accordion title="What you should know before starting">
+    - Basic TypeScript or JavaScript
+    - Familiarity with REST APIs
+    - A high-level understanding of how LLMs work
+
+    You do **not** need prior knowledge of RDF, SPARQL, or knowledge graphs — the Academy teaches these from scratch.
+  </Accordion>
+
+  <Accordion title="What you will need installed">
+    - Node.js 18 or later
+    - A Worlds API key (sign up at [console.wazoo.dev](https://console.wazoo.dev))
+    - `@wazoo/worlds-sdk` and `@wazoo/worlds-ai-sdk` packages
+  </Accordion>
+</AccordionGroup>
+
+## Additional resources
+
+Once you complete the core modules, explore these guides to deepen your expertise.
+
+<CardGroup cols={2}>
+  <Card title="Knowledge graphs" icon="diagram-nested" href="/guides/knowledge-graphs">
+    Master the neuro-symbolic infrastructure of knowledge graphs in depth.
+  </Card>
+  <Card title="Semantic search" icon="eye" href="/guides/semantic-search">
+    Implement contextual retrieval across the global item store.
+  </Card>
+  <Card title="GraphRAG workflows" icon="arrows-split-up-and-left" href="/guides/rag-workflows/graph-rag">
+    Combine symbolic graph traversal with vector similarity for hybrid retrieval.
+  </Card>
+  <Card title="API reference" icon="book-open" href="/reference/api">
+    Browse the full REST API endpoint reference for the Worlds Platform.
+  </Card>
+</CardGroup>

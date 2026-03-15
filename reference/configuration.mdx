@@ -1,0 +1,113 @@
+---
+title: "Configuration"
+description: "Environment variable reference for the Worlds API server, management console, CLI, and embedding providers."
+---
+
+The Worlds Platform is configured through environment variables. The sections below cover each component and the variables that control it.
+
+---
+
+## World server
+
+The world server runs the REST API. Set these variables before starting the server. When using the managed console, they are provisioned and injected automatically during deployment.
+
+| Variable | Required | Default | Purpose |
+| :------- | :------- | :------ | :------ |
+| `WORLDS_API_KEY` | No | — | Root admin key. If omitted, the server runs in **unprotected mode** (all requests are treated as admin). |
+| `WORLDS_BASE_DIR` | No | `./worlds` | Base directory for local world file storage. |
+| `LIBSQL_URL` | No | `file:./worlds.db` | LibSQL/Turso connection string. Use `file:` prefix for local SQLite. |
+| `LIBSQL_AUTH_TOKEN` | No | — | Auth token for remote LibSQL or Turso instances. |
+| `TURSO_API_TOKEN` | No | — | Turso Management API token. Enables remote Turso database provisioning for managed worlds. |
+| `TURSO_ORG` | No | — | Turso organization slug. Required when `TURSO_API_TOKEN` is set. |
+| `WORLDS_EMBEDDINGS_DIMENSIONS` | No | `768` | Vector dimensions used for both the database index and AI embeddings. Must match the chosen embedding model. |
+| `OPENROUTER_API_KEY` | No | — | Enables high-quality OpenRouter embeddings. Takes priority over Ollama. |
+| `OPENROUTER_EMBEDDINGS_MODEL` | No | `openai/text-embedding-3-small` | OpenRouter model used for generating embeddings. |
+| `OLLAMA_BASE_URL` | No | `http://127.0.0.1:11434` | Ollama API base URL. Used when no OpenRouter key is present. |
+| `OLLAMA_EMBEDDINGS_MODEL` | No | `nomic-embed-text` | Ollama model used for generating embeddings. |
+
+**Minimal local `.env` example:**
+
+```bash
+# API access
+WORLDS_API_KEY="your-secret-key"
+
+# Local database
+LIBSQL_URL="file:./worlds.db"
+
+# Local file storage
+WORLDS_BASE_DIR="./worlds"
+```
+
+<Warning>
+  If `WORLDS_API_KEY` is not set, the server runs in **unprotected mode** — all requests are granted full admin access. Never deploy in this state to a public network.
+</Warning>
+
+---
+
+## Management console
+
+These variables are required in the console environment for production deployments.
+
+| Variable | Mode | Purpose |
+| :------- | :--- | :------ |
+| `WORKOS_API_KEY` | Production | Enables remote WorkOS management. |
+| `WORKOS_CLIENT_ID` | Production | Required for AuthKit login. |
+| `WORKOS_COOKIE_PASSWORD` | Production | Password for encrypting secure session cookies. |
+| `WORKOS_REDIRECT_URI` | Production | AuthKit redirect URI (e.g., `http://localhost:3000/callback`). |
+| `DENO_DEPLOY_TOKEN` | Production | Enables remote Deno Deploy orchestration. |
+| `TURSO_API_TOKEN` | Production | Enables remote Turso database provisioning. |
+| `TURSO_ORG` | Production | Turso organization slug. |
+| `WORLDS_EMBEDDINGS_DIMENSIONS` | Both | Unified vector dimensions for DB and AI (default: `768`). |
+| `OPENROUTER_API_KEY` | Both | Global fallback for embeddings. |
+| `OPENROUTER_MANAGEMENT_KEY` | Production | Enables automatic per-app API key generation via OpenRouter API. |
+| `OLLAMA_BASE_URL` | Both | Ollama API URL (default: `http://127.0.0.1:11434`). |
+| `OLLAMA_EMBEDDINGS_MODEL` | Both | Ollama model (default: `nomic-embed-text`). |
+
+---
+
+## CLI
+
+The CLI reads these variables at runtime for both remote and local operation modes.
+
+| Variable | Mode | Purpose |
+| :------- | :--- | :------ |
+| `WORLDS_API_KEY` | Remote | API key for authenticating against a remote server. |
+| `WORLDS_BASE_URL` | Remote | API base URL (e.g., `https://api.wazoo.dev`). |
+| `LIBSQL_URL` | Local | Database URL for local in-process server mode. |
+| `OPENROUTER_API_KEY` | Chat | Enables AI chat via the `worlds chat` command. |
+| `OPENROUTER_MODEL` | Chat | AI model for chat (default: `google/gemini-2.0-flash-001`). |
+
+---
+
+## Embedding providers
+
+The platform automatically selects an embedding provider based on which environment variables are present:
+
+<AccordionGroup>
+  <Accordion title="OpenRouter (recommended for cloud)" defaultOpen={false}>
+    Triggered when `OPENROUTER_API_KEY` is set. Takes priority over Ollama.
+
+    ```bash
+    OPENROUTER_API_KEY="sk-or-..."
+    OPENROUTER_EMBEDDINGS_MODEL="openai/text-embedding-3-small"
+    WORLDS_EMBEDDINGS_DIMENSIONS="1536"  # Match the model's output dimensions
+    ```
+
+    Recommended for production cloud deployments where high-quality embeddings and scalability are required.
+  </Accordion>
+  <Accordion title="Ollama (recommended for local / private)" defaultOpen={false}>
+    Used when `OPENROUTER_API_KEY` is not set. Runs models locally via the Ollama server.
+
+    ```bash
+    OLLAMA_BASE_URL="http://127.0.0.1:11434"
+    OLLAMA_EMBEDDINGS_MODEL="nomic-embed-text"
+    WORLDS_EMBEDDINGS_DIMENSIONS="768"   # Match the model's output dimensions
+    ```
+
+    Recommended for local development and air-gapped or privacy-sensitive deployments.
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+  `WORLDS_EMBEDDINGS_DIMENSIONS` must match the output dimensions of the chosen model. Mismatches cause vector indexing errors. If you switch models, re-index existing worlds.
+</Warning>

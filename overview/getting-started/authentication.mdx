@@ -1,0 +1,139 @@
+---
+title: "Authentication"
+description: "Secure your requests to the Worlds API using Bearer Token authentication."
+---
+
+The Worlds API uses Bearer Token authentication. You must include your API key
+in the `Authorization` header of every request.
+
+## Generating keys
+
+Your access strategy depends on your deployment environment.
+
+<CardGroup cols={2}>
+  <Card title="Cloud" icon="cloud">
+    Generate and manage scoped API keys in the
+    [Worlds Console](https://console.wazoo.dev/settings) under **Settings →
+    API Keys**.
+  </Card>
+  <Card title="Self-hosted" icon="server">
+    Set `WORLDS_API_KEY` in your server's `.env` file. This acts as the root
+    admin key for your instance.
+  </Card>
+</CardGroup>
+
+## Server configuration
+
+When self-hosting the Worlds API, configure authentication via environment
+variables. Copy `.env.example` to `.env` and set the relevant values.
+
+```bash .env
+# API key for API access.
+WORLDS_API_KEY="your-secret-key-here"
+
+# Base directory for local file storage.
+WORLDS_BASE_DIR="./worlds"
+
+# Connection URL for LibSQL/Turso database.
+LIBSQL_URL="file:./worlds.db"
+
+# Authentication token for LibSQL/Turso database.
+LIBSQL_AUTH_TOKEN=""
+```
+
+## Unprotected mode
+
+<Warning>
+  If you do not provide a `WORLDS_API_KEY`, the server runs in **Unprotected
+  Mode**. This disables all authentication and allows anyone with network
+  access to read and modify your data. Use this only for local development.
+</Warning>
+
+Unprotected Mode is enabled by default when `WORLDS_API_KEY` is empty or
+unset. This facilitates rapid prototyping locally without credential management.
+
+## Technical usage
+
+### HTTP header format
+
+When making direct HTTP requests, include the API key as a Bearer token in
+the `Authorization` header.
+
+```http
+Authorization: Bearer <YOUR_API_KEY>
+```
+
+### SDK initialization
+
+The SDK handles authentication automatically when you provide your key during
+client initialization. You never need to set the header manually.
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+const sdk = new WorldsSdk({
+  apiKey: "your-api-key",
+  baseUrl: "http://localhost:8000",
+});
+```
+
+### Environment variable
+
+Avoid hardcoding API keys in source code. Use environment variables instead.
+
+<Tabs>
+  <Tab title="Deno">
+    ```typescript
+    import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+    const sdk = new WorldsSdk({
+      apiKey: Deno.env.get("WORLDS_API_KEY") ?? "",
+      baseUrl: Deno.env.get("WORLDS_BASE_URL") ?? "http://localhost:8000",
+    });
+    ```
+  </Tab>
+  <Tab title="Node.js">
+    ```typescript
+    import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+    const sdk = new WorldsSdk({
+      apiKey: process.env.WORLDS_API_KEY ?? "",
+      baseUrl: process.env.WORLDS_BASE_URL ?? "http://localhost:8000",
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Admin access
+
+Certain endpoints — such as listing all worlds or managing organization-wide
+settings — require an admin-level key.
+
+| Operation | Access level |
+| :-------- | :----------- |
+| Read a specific world | Standard key |
+| Search or query a world | Standard key |
+| Create, update, or delete worlds | Standard key |
+| List all worlds across the organization | Admin key |
+| Manage API keys | Admin key |
+
+In self-hosted scenarios, the `WORLDS_API_KEY` from your `.env` file
+corresponds to the admin key.
+
+## Security best practices
+
+<AccordionGroup>
+  <Accordion title="Rotate keys regularly">
+    Generate new API keys from the Worlds Console periodically and revoke any
+    unused or compromised keys immediately.
+  </Accordion>
+  <Accordion title="Use scoped keys for agents">
+    When giving AI agents access to Worlds, use dedicated read-only or
+    write-scoped keys rather than your admin key. This limits the blast radius
+    if an agent key is leaked.
+  </Accordion>
+  <Accordion title="Never commit keys to source control">
+    Use `.env` files (and add them to `.gitignore`) or a secrets manager such
+    as Doppler or Vault to manage API keys outside of your repository.
+  </Accordion>
+</AccordionGroup>

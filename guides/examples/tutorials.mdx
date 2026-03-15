@@ -1,0 +1,156 @@
+---
+title: "Tutorials"
+description: "End-to-end tutorials for building with the Worlds Platform, from a simple agentic memory loop to multi-world enterprise patterns."
+---
+
+Follow these tutorials to build complete applications with the Worlds Platform. Each tutorial covers a self-contained use case with full working code.
+
+## Building a personal researcher agent
+
+This tutorial walks through building an AI agent with persistent, structured memory using the Worlds SDK and Vercel AI SDK.
+
+<Steps>
+  <Step title="Create a world for your agent">
+    Each agent gets its own isolated world. Create one at startup:
+
+    ```typescript
+    import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+    const sdk = new WorldsSdk({
+      baseUrl: process.env.WORLDS_BASE_URL!,
+      apiKey: process.env.WORLDS_API_KEY!,
+    });
+
+    const world = await sdk.worlds.create({
+      slug: "researcher-agent",
+      label: "Researcher Agent Memory",
+    });
+    const worldId = world.id;
+    ```
+  </Step>
+  <Step title="Define tools for memory access">
+    Expose search and SPARQL as agent tools:
+
+    ```typescript
+    import { tool } from "ai";
+    import { z } from "zod";
+
+    const searchMemory = tool({
+      description: "Search agent memory for relevant knowledge.",
+      parameters: z.object({ query: z.string() }),
+      execute: async ({ query }) => {
+        const results = await sdk.worlds.search(worldId, query, { limit: 10 });
+        return results.map((r) => `${r.subject} ${r.predicate} ${r.object}`);
+      },
+    });
+
+    const rememberFact = tool({
+      description: "Store a new fact in agent memory as a SPARQL INSERT.",
+      parameters: z.object({ sparqlInsert: z.string() }),
+      execute: async ({ sparqlInsert }) => {
+        await sdk.worlds.sparql(worldId, sparqlInsert);
+        return { stored: true };
+      },
+    });
+    ```
+  </Step>
+  <Step title="Run the agent loop">
+    ```typescript
+    import { generateText } from "ai";
+    import { openai } from "@ai-sdk/openai";
+
+    const { text } = await generateText({
+      model: openai("gpt-4o"),
+      tools: { searchMemory, rememberFact },
+      maxSteps: 5,
+      system: `You are a researcher with access to a persistent knowledge graph.
+    Always search memory before answering. Store any new facts you learn.`,
+      prompt: "What do you know about the Worlds Platform?",
+    });
+
+    console.log(text);
+    ```
+  </Step>
+  <Step title="Inspect what the agent learned">
+    After the agent runs, audit its memory via SPARQL:
+
+    ```typescript
+    const facts = await sdk.worlds.sparql(worldId, `
+      SELECT ?s ?p ?o WHERE { ?s ?p ?o . }
+      LIMIT 20
+    `);
+
+    for (const b of facts.results.bindings) {
+      console.log(b.s.value, b.p.value, b.o.value);
+    }
+    ```
+  </Step>
+</Steps>
+
+## Scaling to multiple worlds
+
+For multi-user or multi-tenant applications, create one world per user or workspace and scope all operations to that world's ID.
+
+<Steps>
+  <Step title="Create a world per tenant">
+    ```typescript
+    async function provisionTenant(tenantId: string) {
+      const world = await sdk.worlds.create({
+        slug: `tenant-${tenantId}`,
+        label: `Tenant ${tenantId}`,
+      });
+      return world.id;
+    }
+    ```
+  </Step>
+  <Step title="Scope all operations to the tenant world">
+    Pass the tenant's `worldId` to every SDK call. Worlds are fully isolated — data in one world is never accessible from another.
+
+    ```typescript
+    // All operations scoped to this tenant's world
+    await sdk.worlds.sparql(tenantWorldId, insertQuery);
+    const results = await sdk.worlds.search(tenantWorldId, query);
+    ```
+  </Step>
+  <Step title="List and manage worlds">
+    ```typescript
+    const allWorlds = await sdk.worlds.list({ page: 1, pageSize: 100 });
+    const activeWorlds = allWorlds.filter((w) => w.deletedAt === null);
+    console.log(`Managing ${activeWorlds.length} tenant worlds`);
+    ```
+  </Step>
+</Steps>
+
+## Advanced SPARQL: traversing relationships
+
+This tutorial demonstrates property path queries for multi-hop graph traversal.
+
+```typescript
+// Find everyone two hops away from Alice via schema:knows
+const twoHops = await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  SELECT DISTINCT ?person WHERE {
+    <http://example.com/alice> schema:knows/schema:knows ?person .
+    FILTER(?person != <http://example.com/alice>)
+  }
+`);
+
+// Find all transitive supervisors (zero or more hops)
+const supervisors = await sdk.worlds.sparql(worldId, `
+  PREFIX org: <http://example.com/org/>
+  SELECT ?supervisor WHERE {
+    <http://example.com/alice> org:reportsTo+ ?supervisor .
+  }
+`);
+
+// Aggregate: count how many projects each person works on
+const projectCounts = await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  SELECT ?person (COUNT(?project) AS ?count) WHERE {
+    ?person schema:worksOn ?project .
+  }
+  GROUP BY ?person
+  ORDER BY DESC(?count)
+  LIMIT 10
+`);
+```

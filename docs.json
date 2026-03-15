@@ -1,122 +1,147 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Worlds Platform",
+  "theme": "sequoia",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#fb9c04",
+    "light": "#fcdf7f",
+    "dark": "#6d7475"
   },
   "favicon": "/favicon.svg",
-  "navigation": {
-    "tabs": [
-      {
-        "tab": "Guides",
-        "groups": [
-          {
-            "group": "Getting started",
-            "pages": [
-              "index",
-              "quickstart",
-              "development"
-            ]
-          },
-          {
-            "group": "Customization",
-            "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "API reference",
-        "groups": [
-          {
-            "group": "API documentation",
-            "pages": [
-              "api-reference/introduction"
-            ]
-          },
-          {
-            "group": "Endpoint examples",
-            "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
-            ]
-          }
-        ]
-      }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
   "logo": {
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg"
   },
   "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
     "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
+      "type": "github",
+      "href": "https://github.com/wazootech/worlds"
     }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "github": "https://github.com/wazootech/worlds"
     }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Developer Platform",
+        "groups": [
+          {
+            "group": "Welcome",
+            "pages": ["overview/introduction"]
+          },
+          {
+            "group": "Get Started",
+            "pages": [
+              "overview/getting-started/quickstart",
+              "overview/getting-started/authentication"
+            ]
+          },
+          {
+            "group": "Tutorials",
+            "pages": ["overview/getting-started/agent-integration"]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "overview/philosophy",
+              "overview/architecture",
+              "overview/world-memory",
+              "overview/features"
+            ]
+          },
+          {
+            "group": "Background",
+            "pages": [
+              "overview/whitepaper",
+              "overview/use-cases",
+              "overview/roadmap",
+              "overview/maturity",
+              "overview/history"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/rag-workflows/graph-rag",
+              "guides/rag-workflows/ontology-rag",
+              "guides/rag-workflows/document-rag",
+              "guides/data-integration",
+              "guides/querying",
+              "guides/hosting/production",
+              "guides/monitoring",
+              "guides/knowledge-graphs",
+              "guides/semantic-search"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "guides/examples/code-samples",
+              "guides/examples/datasets",
+              "guides/examples/tutorials",
+              "guides/examples/integrations"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Academy",
+        "groups": [
+          {
+            "group": "Academy",
+            "pages": [
+              "academy/index",
+              "academy/memory",
+              "academy/graphs",
+              "academy/sparql",
+              "academy/agents"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "API Basics",
+            "pages": ["reference/api", "reference/api-basics/authentication"]
+          },
+          {
+            "group": "CLI",
+            "pages": ["reference/cli"]
+          },
+          {
+            "group": "Configuration",
+            "pages": ["reference/configuration"]
+          },
+          {
+            "group": "System Internals",
+            "pages": ["reference/request-flow"]
+          },
+          {
+            "group": "Changelog",
+            "pages": ["reference/changelog"]
+          }
+        ]
+      },
+      {
+        "tab": "Contributing",
+        "groups": [
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/developer-guide",
+              "contributing/guidelines",
+              "contributing/best-practices",
+              "contributing/code-of-conduct",
+              "contributing/getting-help"
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

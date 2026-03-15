@@ -1,0 +1,103 @@
+---
+title: "Authentication"
+description: "Authenticate requests to the Worlds API using Bearer tokens."
+---
+
+The Worlds API requires **Bearer token** authentication. Include your API key in the `Authorization` header of every request.
+
+## Generate a key
+
+<Tabs>
+  <Tab title="Cloud">
+    Generate an API key in the [Wazoo console](https://console.wazoo.dev/settings) under **Settings**.
+  </Tab>
+  <Tab title="Self-hosted">
+    Set the `WORLDS_API_KEY` environment variable on your server. This acts as the **root admin key** for your instance.
+
+    ```bash
+    WORLDS_API_KEY="your-secret-key"
+    ```
+
+    See the [configuration reference](/reference/configuration) for all available environment variables.
+  </Tab>
+</Tabs>
+
+### Unprotected mode
+
+For rapid prototyping, `WORLDS_API_KEY` is optional on self-hosted servers.
+
+<Warning>
+  If `WORLDS_API_KEY` is not set, the server runs in **unprotected mode** and grants full admin access to every request — no token required. Use this only for local development. Never deploy an unprotected server to production.
+</Warning>
+
+---
+
+## Authenticate requests
+
+### Set the header directly
+
+Add the `Authorization` header to every API request:
+
+```http
+Authorization: Bearer <YOUR_API_KEY>
+```
+
+**Example with curl:**
+
+```bash
+curl https://api.wazoo.dev/worlds \
+  -H "Authorization: Bearer <YOUR_API_KEY>"
+```
+
+### Use the TypeScript SDK
+
+Pass your key when initializing the SDK client. The client automatically attaches the `Authorization` header to every request.
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+const sdk = new WorldsSdk({
+  apiKey: "YOUR_API_KEY",
+  baseUrl: "https://api.wazoo.dev",
+});
+```
+
+### Use the CLI
+
+Set the `WORLDS_API_KEY` environment variable before running CLI commands:
+
+```bash
+export WORLDS_API_KEY="YOUR_API_KEY"
+export WORLDS_BASE_URL="https://api.wazoo.dev"
+
+worlds list
+```
+
+See the [CLI reference](/reference/cli) for all available commands and environment variables.
+
+---
+
+## Error responses
+
+When authentication fails, the API returns one of the following error responses:
+
+| Status | Reason |
+| :----- | :----- |
+| `401 Unauthorized` | The `Authorization` header is missing or the token format is incorrect. |
+| `403 Forbidden` | The token is valid but the operation requires admin privileges (e.g., creating a world). |
+
+```json
+{
+  "error": "Unauthorized"
+}
+```
+
+---
+
+## Admin access
+
+All current API endpoints require the admin (root) API key. In cloud deployments, use the key generated from the console. In self-hosted environments, this is the value of `WORLDS_API_KEY`.
+
+<Info>
+  The server validates tokens by comparing the `Authorization: Bearer <token>` value against the configured `WORLDS_API_KEY`. There is currently one access level: admin.
+</Info>

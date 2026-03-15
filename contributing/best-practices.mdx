@@ -1,0 +1,194 @@
+---
+title: "Best practices"
+description: "TypeScript, RDF/SPARQL, and SDK usage patterns for the Worlds Platform codebase."
+---
+
+This page covers the TypeScript conventions, RDF/SPARQL patterns, and SDK usage guidelines that apply across the Worlds Platform codebase.
+
+## TypeScript best practices
+
+### Use strict types
+
+Avoid `any`. Use Zod schemas to validate external input at runtime and derive TypeScript types from those schemas:
+
+```typescript
+import { z } from "zod";
+
+const CreateWorldSchema = z.object({
+  label: z.string().min(1),
+  description: z.string().optional(),
+});
+
+type CreateWorldInput = z.infer<typeof CreateWorldSchema>;
+```
+
+### JSDoc on public APIs
+
+Add JSDoc comments to all exported functions, classes, and interfaces. This drives IDE tooling and the published SDK documentation:
+
+```typescript
+/**
+ * Executes a SPARQL query or update against the specified world.
+ *
+ * @param worldId - The unique identifier of the target world.
+ * @param query - A SPARQL 1.1 query or update string.
+ * @returns The query result set, or void for update operations.
+ */
+export async function sparql(worldId: string, query: string): Promise<SparqlResult | void> {
+  // ...
+}
+```
+
+### Module organization
+
+Each resource or feature lives in its own directory with co-located schema, service, and test files. Do not put unrelated logic in the same file. Export only what other modules need — keep implementation details private.
+
+### Error handling
+
+Propagate errors explicitly. Use typed `ErrorResponse` objects for HTTP responses rather than throwing unstructured errors:
+
+```typescript
+import { ErrorResponse } from "../errors.ts";
+
+if (!world) {
+  return new ErrorResponse(404, "World not found");
+}
+```
+
+## RDF and SPARQL patterns
+
+### Use full URIs in triples
+
+Always use absolute URIs for subjects, predicates, and objects to avoid ambiguity:
+
+```sparql
+INSERT DATA {
+  <http://example.com/ethan> <http://schema.org/relatedTo> <http://example.com/gregory> .
+  <http://example.com/gregory> <http://schema.org/givenName> "Gregory" .
+}
+```
+
+### Prefer schema.org predicates
+
+Where possible, use well-known vocabularies such as `schema.org` for predicates. This improves interoperability and makes graphs easier to reason about:
+
+```sparql
+SELECT ?name ?email WHERE {
+  ?person a <http://schema.org/Person> .
+  ?person <http://schema.org/givenName> ?name .
+  ?person <http://schema.org/email> ?email .
+}
+```
+
+### Scope SPARQL queries with LIMIT
+
+When exploring a knowledge base or writing exploratory queries, always include a `LIMIT` clause to avoid unbounded scans:
+
+```sparql
+SELECT ?s ?p ?o WHERE {
+  ?s ?p ?o
+} LIMIT 100
+```
+
+### Use UPDATE for mutations
+
+Use `INSERT DATA`, `DELETE DATA`, or `DELETE/INSERT WHERE` for graph mutations. Do not use `SELECT` queries to read-then-modify state:
+
+```sparql
+DELETE DATA {
+  <http://example.com/ethan> <http://schema.org/relatedTo> <http://example.com/gregory> .
+}
+
+INSERT DATA {
+  <http://example.com/ethan> <http://schema.org/colleague> <http://example.com/gregory> .
+}
+```
+
+## SDK usage patterns
+
+### Initialize once
+
+Create a single `WorldsSdk` instance and reuse it across your application. Do not create a new client per request:
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+const sdk = new WorldsSdk({
+  baseUrl: process.env.WORLDS_BASE_URL,
+  apiKey: process.env.WORLDS_API_KEY,
+});
+
+export { sdk };
+```
+
+### Handle errors explicitly
+
+Check the result of SDK calls before using them. The SDK surfaces HTTP errors as typed exceptions:
+
+```typescript
+try {
+  const result = await sdk.worlds.sparql(worldId, query);
+  // process result
+} catch (error) {
+  console.error("SPARQL query failed:", error);
+  throw error;
+}
+```
+
+### Use the AI SDK for agent tool-calling
+
+When integrating with LLMs, use `@wazoo/worlds-ai-sdk` instead of calling the SDK directly. The AI SDK wraps the SDK into tool-calling functions that LLMs can invoke:
+
+```typescript
+import { generateText } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+import { createTools } from "@wazoo/worlds-ai-sdk";
+
+const sdk = new WorldsSdk({
+  baseUrl: "http://localhost:8000",
+  apiKey: "your-api-key",
+});
+
+const { text } = await generateText({
+  model: openai("gpt-4o"),
+  tools: createTools({
+    sdk,
+    sources: [{ id: "my-knowledge-base" }],
+  }),
+  prompt: "Find all people in the knowledge base and describe their relationships.",
+});
+```
+
+### Use the CLI for local development
+
+Install the CLI for quick inspection and management of local worlds during development:
+
+```bash
+deno install -A --name worlds jsr:@wazoo/worlds-cli
+```
+
+```bash
+# Inspect graph contents
+worlds sparql "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10"
+
+# Create a new world
+worlds create --label "Test World"
+
+# List all worlds
+worlds list
+```
+
+## Documentation best practices
+
+When contributing to the documentation in `packages/docs`:
+
+- Write in second-person voice and active tense.
+- Use sentence case for all headings.
+- Add a language tag to every code block.
+- Use Mintlify components (`<Steps>`, `<Note>`, `<Card>`, etc.) instead of raw HTML.
+- Run `npm run precommit --prefix packages/docs` before committing documentation changes.
+
+<Tip>
+  Read 2–3 existing documentation pages before writing new ones to match the established voice and formatting conventions.
+</Tip>

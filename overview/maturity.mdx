@@ -1,0 +1,57 @@
+---
+title: "Maturity matrix"
+description: "Transparency into the current state and stability of the platform's core features."
+---
+
+The following matrix provides transparency into the current state and stability
+of the platform's core features.
+
+## Feature status
+
+| Category           | Feature               | Status     | Description                                       |
+| :----------------- | :-------------------- | :--------- | :------------------------------------------------ |
+| **Core storage**   | libSQL / SQLite       | **Stable** | Performant, reliable storage for triples/chunks.  |
+| **Search**         | Hybrid vector and FTS | **Stable** | High-fidelity RRF retrieval.                      |
+| **Querying**       | SPARQL 1.1            | **Beta**   | Full query/update support; optimization ongoing.  |
+| **SDK**            | worlds-sdk            | **Stable** | Mature, typed interface for core operations.      |
+| **Integrations**   | MCP support           | **Beta**   | Tool-based integration for Claude and Gemini.     |
+| **Enterprise**     | RBAC / AuthKit        | **Alpha**  | Role-based access control and advanced auth.      |
+| **Infrastructure** | Edge deployment       | **Beta**   | Optimized for Deno Deploy and distributed edge.   |
+
+## Release stages
+
+<CardGroup cols={3}>
+  <Card title="Stable" icon="circle-check">
+    Production-ready. The API is locked and breaking changes are minimized.
+    Safe to build on in production environments.
+  </Card>
+  <Card title="Beta" icon="circle-half-stroke">
+    Feature-complete but may contain performance bottlenecks or minor bugs.
+    API shape is unlikely to change significantly.
+  </Card>
+  <Card title="Alpha" icon="circle-dashed">
+    Experimental. The API and architecture are subject to frequent,
+    significant changes. Not recommended for production use.
+  </Card>
+</CardGroup>
+
+## Checking feature availability
+
+You can query the Worlds logs API to monitor errors and track the health of
+specific features in your deployment.
+
+```typescript
+// Retrieve error-level logs for a specific world
+const logs = await sdk.worlds.listLogs("my-world", {
+  page: 1,
+  pageSize: 50,
+  level: "error",
+});
+
+console.log(`Found ${logs.length} error(s).`);
+```
+
+## Roadmap
+
+For upcoming capabilities and the platform's future direction, see the
+[Roadmap](/overview/roadmap).

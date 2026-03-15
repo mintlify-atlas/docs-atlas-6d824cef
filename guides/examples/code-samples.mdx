@@ -1,0 +1,260 @@
+---
+title: "Code samples"
+description: "Ready-to-use code samples for common Worlds SDK patterns across TypeScript, Python, and agentic frameworks."
+---
+
+Explore these code samples to see how to integrate Worlds into your applications. All samples use the `@wazoo/worlds-sdk` package.
+
+## SDK initialization
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+const sdk = new WorldsSdk({
+  baseUrl: "http://localhost:8000",  // or your production URL
+  apiKey: "your-api-key",
+});
+```
+
+## World management
+
+<CodeGroup>
+
+```typescript Create a world
+const world = await sdk.worlds.create({
+  slug: "my-knowledge-base",
+  label: "My Knowledge Base",
+  description: "A world for storing structured knowledge.",
+});
+
+console.log(world.id); // ULID
+```
+
+```typescript List worlds
+const worlds = await sdk.worlds.list({
+  page: 1,
+  pageSize: 20,
+});
+
+for (const w of worlds) {
+  console.log(w.id, w.label);
+}
+```
+
+```typescript Update a world
+await sdk.worlds.update(worldId, {
+  label: "Updated Label",
+  description: "Updated description.",
+});
+```
+
+```typescript Delete a world
+await sdk.worlds.delete(worldId);
+// Soft delete: the world is marked deleted_at but not purged
+```
+
+</CodeGroup>
+
+## Inserting knowledge
+
+<CodeGroup>
+
+```typescript Insert individual triples
+await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  INSERT DATA {
+    <http://example.com/ethan> schema:relatedTo <http://example.com/gregory> .
+    <http://example.com/gregory> schema:givenName "Gregory" .
+  }
+`);
+```
+
+```typescript Import Turtle file
+import { readFile } from "node:fs/promises";
+
+const turtleData = await readFile("./knowledge.ttl", "utf8");
+await sdk.worlds.import(worldId, turtleData, { format: "turtle" });
+```
+
+```typescript Import inline Turtle
+const turtle = `
+  @prefix schema: <http://schema.org/> .
+  @prefix ex:     <http://example.com/> .
+
+  ex:alice a schema:Person ;
+    schema:name "Alice" ;
+    schema:knows ex:bob .
+
+  ex:bob a schema:Person ;
+    schema:name "Bob" .
+`;
+
+await sdk.worlds.import(worldId, turtle, { format: "turtle" });
+```
+
+</CodeGroup>
+
+## Querying the graph
+
+<CodeGroup>
+
+```typescript SELECT query
+const result = await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  SELECT ?name WHERE {
+    <http://example.com/ethan> schema:relatedTo ?person .
+    ?person schema:givenName ?name .
+  }
+`);
+
+for (const binding of result.results.bindings) {
+  console.log(binding.name.value);
+}
+```
+
+```typescript ASK query
+const exists = await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  ASK {
+    <http://example.com/ethan> schema:relatedTo <http://example.com/gregory> .
+  }
+`);
+
+console.log(exists.boolean); // true or false
+```
+
+```typescript CONSTRUCT query
+const graph = await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  CONSTRUCT {
+    ?person schema:knows ?related .
+  }
+  WHERE {
+    ?person schema:relatedTo ?related .
+  }
+`);
+
+for (const quad of graph.results.quads) {
+  console.log(quad.subject.value, "->", quad.object.value);
+}
+```
+
+</CodeGroup>
+
+## Semantic search
+
+<CodeGroup>
+
+```typescript Basic search
+const results = await sdk.worlds.search(
+  worldId,
+  "people related to Ethan",
+  { limit: 10 },
+);
+
+for (const r of results) {
+  console.log(r.subject, r.predicate, r.object, r.score);
+}
+```
+
+```typescript Filtered search
+const results = await sdk.worlds.search(
+  worldId,
+  "people related to Ethan",
+  {
+    limit: 10,
+    subjects: ["http://example.com/ethan"],
+    predicates: ["http://schema.org/relatedTo"],
+  },
+);
+```
+
+```typescript Type-scoped search
+const results = await sdk.worlds.search(
+  worldId,
+  "engineering projects",
+  {
+    limit: 10,
+    types: ["http://schema.org/Project"],
+  },
+);
+```
+
+</CodeGroup>
+
+## Agentic workflow with Vercel AI SDK
+
+Integrate Worlds as a tool in an AI agent using the Vercel AI SDK:
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+import { generateText, tool } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { z } from "zod";
+
+const sdk = new WorldsSdk({
+  baseUrl: "http://localhost:8000",
+  apiKey: "your-api-key",
+});
+
+const worldId = "your-world-id";
+
+const { text } = await generateText({
+  model: openai("gpt-4o"),
+  tools: {
+    searchKnowledge: tool({
+      description: "Search the knowledge graph for relevant information.",
+      parameters: z.object({
+        query: z.string().describe("Natural language search query"),
+      }),
+      execute: async ({ query }) => {
+        const results = await sdk.worlds.search(worldId, query, { limit: 10 });
+        return results.map((r) => `${r.subject} ${r.predicate} ${r.object}`);
+      },
+    }),
+    queryGraph: tool({
+      description: "Execute a SPARQL SELECT query on the knowledge graph.",
+      parameters: z.object({
+        sparql: z.string().describe("A valid SPARQL SELECT query"),
+      }),
+      execute: async ({ sparql }) => {
+        const result = await sdk.worlds.sparql(worldId, sparql);
+        if (result && "results" in result) {
+          return result.results.bindings;
+        }
+        return [];
+      },
+    }),
+    recordFact: tool({
+      description: "Store a new fact in the knowledge graph.",
+      parameters: z.object({
+        sparqlInsert: z.string().describe("A SPARQL INSERT DATA statement"),
+      }),
+      execute: async ({ sparqlInsert }) => {
+        await sdk.worlds.sparql(worldId, sparqlInsert);
+        return { success: true };
+      },
+    }),
+  },
+  maxSteps: 5,
+  prompt: "What is Ethan currently working on?",
+});
+
+console.log(text);
+```
+
+## Export and backup
+
+```typescript
+// Export as Turtle
+const buffer = await sdk.worlds.export(worldId, { format: "turtle" });
+const text = new TextDecoder().decode(buffer);
+console.log(text);
+
+// Export as N-Quads (default internal format)
+const nquads = await sdk.worlds.export(worldId, { format: "n-quads" });
+
+// Save to file
+import { writeFile } from "node:fs/promises";
+await writeFile("backup.ttl", new Uint8Array(buffer));
+```

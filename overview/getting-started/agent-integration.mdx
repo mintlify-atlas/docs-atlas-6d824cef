@@ -1,0 +1,172 @@
+---
+title: "AI agent integration"
+description: "Connect Worlds to AI agents and agentic loops for stateful, structured memory."
+---
+
+After installing the Worlds SDK, you can connect it directly to AI agents
+using the `@wazoo/worlds-ai-sdk`. This gives your agents a persistent,
+queryable knowledge base they can read from and write to autonomously.
+
+## Install the AI SDK
+
+<CodeGroup>
+
+```bash deno
+deno add jsr:@wazoo/worlds-ai-sdk
+```
+
+```bash npm
+npx jsr add @wazoo/worlds-ai-sdk
+```
+
+```bash pnpm
+pnpm i jsr:@wazoo/worlds-ai-sdk
+```
+
+</CodeGroup>
+
+## Using `createTools` with Vercel AI SDK
+
+The `createTools` function generates a set of agent tools that wrap the
+Worlds SDK. Pass these tools directly to any Vercel AI SDK `generateText` or
+`streamText` call.
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+import { createTools } from "@wazoo/worlds-ai-sdk";
+import { generateText } from "ai";
+import { openai } from "@ai-sdk/openai";
+
+const sdk = new WorldsSdk({
+  baseUrl: "http://localhost:8000",
+  apiKey: "your-api-key",
+});
+
+const tools = createTools({
+  sdk,
+  sources: [{ id: "my-knowledge-base", write: false }],
+});
+
+const { text } = await generateText({
+  model: openai("gpt-4o"),
+  tools,
+  prompt: "Find all people in the knowledge base and describe them.",
+});
+
+console.log(text);
+```
+
+### Sources with write access
+
+Grant write access to allow the agent to update the knowledge graph during
+a session.
+
+```typescript
+const tools = createTools({
+  sdk,
+  sources: [
+    { id: "my-knowledge-base", write: true },
+    { id: "reference-data", write: false },
+  ],
+});
+```
+
+<Warning>
+  Enable write access only for trusted agents. An agent with write access can
+  insert, update, and delete triples in your world.
+</Warning>
+
+## Available agent tools
+
+When you call `createTools`, the following tools become available to the
+agent:
+
+| Tool | Description |
+| :--- | :---------- |
+| `discover-schema` | Identifies the structure and predicates present in a world to guide agent reasoning. |
+| `execute-sparql` | Allows agents to run precise symbolic queries and updates using SPARQL 1.1. |
+| `search-entities` | Performs semantic and keyword hybrid search to find relevant knowledge. |
+| `generate-iri` | Creates stable, predictable identifiers for new entities. |
+
+## Vibe coding
+
+["Vibe coding"](https://x.com/karpathy/status/1886192184808149383) is
+the practice of using AI agents — including Claude Code, Windsurf, or
+Cursor — to build applications through high-level intent rather than
+manual line-by-line coding.
+
+Worlds suits vibe coding because its state is semantic and malleable.
+Treat the AI output as a completed unit while maintaining a persistent,
+structured memory.
+
+### The agent prompt
+
+To help an AI agent integrate with Worlds, paste the following prompt into
+your agent's context at the start of a session:
+
+```markdown
+I am building an application using Worlds. Worlds are persistent, semantic
+knowledge containers.
+
+- Use the `@wazoo/worlds-sdk` SDK, which is available on JSR, to interact with them.
+- Every World has a `worldId`.
+- Store data as "Malleable Knowledge", which automatically indexes and becomes searchable.
+- Use the `search` endpoint to retrieve context from a World.
+
+When I ask you to "Remember X", call the Worlds SDK to store it.
+When I ask a question about X, search the World for context first.
+```
+
+## Claude Code integration
+
+If you are using Claude Code, add Worlds as a custom skill by providing the
+OpenAPI specification.
+
+<Steps>
+  <Step title="Get your API key">
+    Retrieve your key from the [Worlds Console](https://console.wazoo.dev).
+  </Step>
+  <Step title="Mount the spec">
+    Tell Claude to read the OpenAPI specification:
+    ```
+    claude "Read https://docs.wazoo.dev/openapi.json and use the Worlds API."
+    ```
+  </Step>
+  <Step title="Start building">
+    Run a high-level command to begin:
+    ```
+    claude "Help me build a personal memory world for my project."
+    ```
+  </Step>
+</Steps>
+
+## Unhobbling agents
+
+When you connect the `@wazoo/worlds-sdk` to your agent, you are explicitly
+"unhobbling" it — transitioning the model from relying on heavily scaffolded
+developer logic to its own native reasoning.
+
+By granting your agent direct tool access to a deterministic memory graph,
+it can:
+
+- Proactively investigate tool documentation before executing.
+- Navigate complex multi-step workflows automatically.
+- Gracefully self-correct when it encounters unexpected errors.
+- Collaborate with other agents in a swarm via shared world state.
+
+<Info>
+  **The Agent OS:** Supplying agents with robust APIs allows them to function
+  intelligently within swarms, observe workflows collaboratively, and manage
+  complete tasks efficiently without tight developer scaffolding.
+</Info>
+
+## Best practices
+
+- **Semantic naming**: Give your Worlds descriptive slugs. The agent uses
+  these names to choose the correct container for context.
+- **Verbose connectors**: Let the AI agent handle configuration logic when
+  setting up connectors rather than hardcoding it yourself.
+- **Context loops**: Always ask the agent to "check the world" at the start
+  of each session so it loads prior context before taking action.
+- **Scoped keys**: Give agents dedicated API keys with only the permissions
+  they need. See [Authentication](/overview/getting-started/authentication).

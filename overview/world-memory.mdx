@@ -1,0 +1,167 @@
+---
+title: "World memory"
+description: "The primary resource of the Worlds ecosystem: a dedicated, isolated knowledge graph instance."
+---
+
+A **world** is the foundational unit of organization in the Worlds ecosystem.
+It provides an isolated container for an agent's relationships, history, and
+facts.
+
+<Note>
+  **Why AI forgets**
+
+  Traditional AI can only "remember" what's in its current chat window. Once
+  that window fills up or the chat ends, it loses the thread. This makes it
+  hard for agents to handle complex jobs that span more than one session.
+
+  **The solution: linked memory**
+
+  Instead of hoping the AI finds the right data in a massive pile of
+  embeddings, Worlds creates a structured map — a graph. By linking related
+  facts together, your agent can always follow the logical path from one piece
+  of information to another, regardless of how much data you add.
+</Note>
+
+## Goals
+
+| Goal            | Description                          | Constraint                     |
+| :-------------- | :----------------------------------- | :----------------------------- |
+| **Isolation**   | Prevent data leakage between agents. | One RDF dataset per world.     |
+| **Portability** | Maintain memory across model swaps.  | Decoupled from LLM provider.   |
+| **Fusion**      | Hybrid neural/symbolic reasoning.    | Requires both vector + SPARQL. |
+
+## Architecture
+
+A world functions as a **neuro-symbolic memory container**. It pairs an
+isolated RDF dataset with a high-performance vector search index.
+
+<CardGroup cols={2}>
+  <Card title="Neural layer" icon="wave-sine">
+    Vector embeddings manage semantic similarity, allowing the agent to
+    navigate the world through natural language queries.
+  </Card>
+  <Card title="Symbolic layer" icon="diagram-venn">
+    RDF and SPARQL provide deterministic facts and validation, reducing the
+    risk of hallucinations inherent in standalone LLMs.
+  </Card>
+</CardGroup>
+
+### Neural layer
+
+The neural layer uses vector embeddings to manage semantic similarity. It
+allows your agent to navigate a world through natural language queries without
+requiring precise structured input. This layer powers the `search` API method.
+
+```typescript
+// Natural language search over a world
+const results = await sdk.worlds.search(
+  "my-world",
+  "Find people who work in engineering",
+  {
+    limit: 10,
+    types: ["https://schema.org/Person"],
+  },
+);
+```
+
+### Symbolic layer
+
+The symbolic layer uses RDF and SPARQL for deterministic facts. It provides
+deterministic validation, reducing the risk of hallucinations inherent in
+standalone LLMs. Every retrieved fact has a verifiable origin in the RDF graph.
+
+```typescript
+// Deterministic SPARQL query over a world
+const results = await sdk.worlds.sparql(
+  "my-world",
+  `
+    PREFIX schema: <https://schema.org/>
+    SELECT ?person ?name WHERE {
+      ?person a schema:Person ;
+        schema:jobTitle "Engineer" ;
+        schema:name ?name .
+    }
+  `,
+);
+```
+
+## World lifecycle
+
+<Steps>
+  <Step title="Create">
+    Provision an isolated knowledge graph with a unique slug and optional
+    metadata.
+
+    ```typescript
+    const world = await sdk.worlds.create({
+      slug: "project-context",
+      label: "Project Context",
+      description: "Persistent memory for my AI project.",
+    });
+    ```
+  </Step>
+  <Step title="Ingest">
+    Load structured knowledge via SPARQL updates or bulk RDF import.
+
+    ```typescript
+    await sdk.worlds.import(world.id, turtleData, { format: "turtle" });
+    ```
+  </Step>
+  <Step title="Query and reason">
+    Retrieve context using SPARQL for precision or hybrid search for
+    natural-language queries.
+  </Step>
+  <Step title="Update">
+    Mutate specific facts atomically without re-indexing the entire graph.
+
+    ```typescript
+    await sdk.worlds.sparql(
+      world.id,
+      `
+        PREFIX ex: <https://example.org/>
+        PREFIX schema: <https://schema.org/>
+        DELETE { ex:alice schema:jobTitle "Engineer" . }
+        INSERT { ex:alice schema:jobTitle "Staff Engineer" . }
+        WHERE {}
+      `,
+    );
+    ```
+  </Step>
+  <Step title="Export or delete">
+    Export the world to a portable RDF format, or delete it when it is no
+    longer needed.
+
+    ```typescript
+    const buffer = await sdk.worlds.export(world.id, { format: "turtle" });
+    // or
+    await sdk.worlds.delete(world.id);
+    ```
+  </Step>
+</Steps>
+
+## Audit trails
+
+Worlds eliminates "black box" behavior. Every retrieved fact has a verifiable
+audit trail in the RDF graph. If an agent makes a claim, the symbolic layer
+proves it — providing full traceability for high-stakes applications like
+medicine, law, or compliance.
+
+## Managing worlds via SDK
+
+```typescript
+// List all worlds (paginated)
+const worlds = await sdk.worlds.list({ page: 1, pageSize: 20 });
+
+// Get a specific world
+const world = await sdk.worlds.get("my-world");
+
+// Update world metadata
+await sdk.worlds.update("my-world", { label: "Updated Label" });
+
+// Retrieve logs for a world
+const logs = await sdk.worlds.listLogs("my-world", {
+  page: 1,
+  pageSize: 50,
+  level: "error",
+});
+```

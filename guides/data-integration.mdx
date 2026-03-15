@@ -1,0 +1,164 @@
+---
+title: "Data integration"
+description: "Import, sync, and manage RDF data in Worlds using Turtle, N-Quads, N-Triples, and N3 formats."
+---
+
+Worlds supports multiple strategies for ingesting data into isolated world memory, ranging from one-time bulk imports to real-time triple insertions from agentic loops.
+
+## Supported RDF formats
+
+The SDK and API accept four RDF serialization formats:
+
+| Format | MIME type | Extension | Use case |
+| :--- | :--- | :--- | :--- |
+| **Turtle** | `text/turtle` | `.ttl` | Human-readable, prefixed syntax |
+| **N-Quads** | `application/n-quads` | `.nq` | Default internal format, named graphs |
+| **N-Triples** | `application/n-triples` | `.nt` | Simple line-by-line triples |
+| **N3** | `text/n3` | `.n3` | Turtle superset with rules |
+
+## Ingestion strategies
+
+### One-time bulk import
+
+Use `sdk.worlds.import()` to bootstrap a world with an existing RDF dataset or ontology. The server parses the data, normalizes it to N-Quads internally, generates embeddings for all literal values, and commits everything to the search index atomically.
+
+<Tabs>
+  <Tab title="Turtle">
+    ```typescript
+    import { WorldsSdk } from "@wazoo/worlds-sdk";
+    import { readFile } from "node:fs/promises";
+
+    const sdk = new WorldsSdk({
+      baseUrl: "http://localhost:8000",
+      apiKey: "your-api-key",
+    });
+
+    const turtleData = await readFile("./ontology.ttl", "utf8");
+    await sdk.worlds.import(worldId, turtleData, { format: "turtle" });
+    ```
+  </Tab>
+  <Tab title="N-Quads">
+    ```typescript
+    const nquadsData = await readFile("./dataset.nq", "utf8");
+    await sdk.worlds.import(worldId, nquadsData, { format: "n-quads" });
+    ```
+  </Tab>
+  <Tab title="N-Triples">
+    ```typescript
+    const ntriplesData = await readFile("./triples.nt", "utf8");
+    await sdk.worlds.import(worldId, ntriplesData, { format: "n-triples" });
+    ```
+  </Tab>
+  <Tab title="N3">
+    ```typescript
+    const n3Data = await readFile("./rules.n3", "utf8");
+    await sdk.worlds.import(worldId, n3Data, { format: "n3" });
+    ```
+  </Tab>
+</Tabs>
+
+### Direct SPARQL insertion
+
+For real-time applications, insert individual triples or small batches using SPARQL `INSERT DATA`:
+
+```typescript
+await sdk.worlds.sparql(worldId, `
+  PREFIX schema: <http://schema.org/>
+  INSERT DATA {
+    <http://example.com/ethan> schema:relatedTo <http://example.com/gregory> .
+    <http://example.com/gregory> schema:givenName "Gregory" .
+  }
+`);
+```
+
+Each SPARQL update is processed through the full patch pipeline: triples are skolemized, hashed for deterministic IDs, upserted into the triples table, and their literal values are chunked and embedded for hybrid search.
+
+### Inline Turtle import
+
+For smaller datasets, pass a Turtle string directly without reading from a file:
+
+```typescript
+const turtleData = `
+  @prefix schema: <http://schema.org/> .
+  @prefix ex: <http://example.com/> .
+
+  ex:alice a schema:Person ;
+    schema:name "Alice" ;
+    schema:jobTitle "Engineer" .
+
+  ex:bob a schema:Person ;
+    schema:name "Bob" ;
+    schema:knows ex:alice .
+`;
+
+await sdk.worlds.import(worldId, turtleData, { format: "turtle" });
+```
+
+## Exporting data
+
+Export a world's full graph in any supported format:
+
+```typescript
+// Export as Turtle
+const buffer = await sdk.worlds.export(worldId, { format: "turtle" });
+const text = new TextDecoder().decode(buffer);
+
+// Export as N-Quads (default internal format)
+const nquads = await sdk.worlds.export(worldId, { format: "n-quads" });
+```
+
+## Data synchronization
+
+To keep world memory in sync with an external source, translate external change events into RDF patch operations:
+
+<Steps>
+  <Step title="Map external events">
+    Capture change events from your source system (database CDC, webhooks, file watchers).
+  </Step>
+  <Step title="Translate to RDF patches">
+    Convert each change into a pair of delete/insert SPARQL operations. Always delete the old fact before inserting the new one to maintain graph consistency.
+  </Step>
+  <Step title="Apply patches atomically">
+    Execute the SPARQL updates via the SDK. Each update is committed to both the triple store and the search index:
+
+    ```typescript
+    // Remove stale fact
+    await sdk.worlds.sparql(worldId, `
+      PREFIX schema: <http://schema.org/>
+      DELETE DATA {
+        <http://example.com/alice> schema:jobTitle "Engineer" .
+      }
+    `);
+
+    // Insert updated fact
+    await sdk.worlds.sparql(worldId, `
+      PREFIX schema: <http://schema.org/>
+      INSERT DATA {
+        <http://example.com/alice> schema:jobTitle "Senior Engineer" .
+      }
+    `);
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+Always skolemize blank nodes before ingestion to ensure deterministic triple IDs. The platform's internal patch handler uses RDFC-1.0 canonicalization to generate stable SHA-256 hashes for each quad, so blank nodes from separate import operations will produce different IDs unless replaced with named IRIs.
+</Tip>
+
+## Verifying ingestion
+
+After importing, verify the triple count and spot-check specific facts:
+
+```typescript
+// Count total triples
+const countResult = await sdk.worlds.sparql(worldId, `
+  SELECT (COUNT(*) AS ?count) WHERE { ?s ?p ?o . }
+`);
+console.log("Triples:", countResult.results.bindings[0].count.value);
+
+// Verify a specific entity
+const check = await sdk.worlds.sparql(worldId, `
+  ASK { <http://example.com/alice> a <http://schema.org/Person> . }
+`);
+console.log("Alice exists:", check.boolean);
+```

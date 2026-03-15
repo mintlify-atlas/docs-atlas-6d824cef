@@ -1,0 +1,64 @@
+---
+title: "Changelog"
+description: "Release history and notable changes for the Worlds Platform."
+---
+
+## March 2026 — v1.0.0-alpha
+
+Initial public release of the Worlds Platform.
+
+### Neuro-symbolic engine
+
+Semantic vector search fused with SPARQL 1.1 determinism. Every SPARQL update and RDF import automatically patches the search index, keeping full-text and vector retrieval in sync with the graph state.
+
+- **SPARQL 1.1 and 1.2 support** — SELECT, ASK, CONSTRUCT, DESCRIBE queries; INSERT/DELETE updates; RDF-star triple terms.
+- **Hybrid search** — Combined vector (`vecRank`) and full-text (`ftsRank`) scoring for every triple.
+- **ETag caching** — Conditional `GET` requests with `If-None-Match` / `304 Not Modified` support on world read endpoints.
+
+### REST API
+
+Full REST API for managing knowledge graph instances:
+
+- `GET / POST /worlds` — List and create worlds.
+- `GET / PUT / DELETE /worlds/:world` — Retrieve, update, and soft-delete worlds.
+- `GET / POST /worlds/:world/sparql` — SPARQL Protocol endpoint (SPARQL 1.1 compliant).
+- `GET /worlds/:world/search` — Semantic hybrid search with subject, predicate, and type filters.
+- `POST /worlds/:world/import` — Bulk RDF import (Turtle, N-Quads, N-Triples, N3).
+- `GET /worlds/:world/export` — Full graph export with content negotiation.
+- `GET /worlds/:world/logs` — Paginated operation history with level filtering.
+
+### TypeScript SDK
+
+Full-fidelity client for world management and querying:
+
+- `WorldsSdk` client with typed methods for every API endpoint.
+- Zod schemas for all request and response types.
+- Support for SPARQL SELECT, ASK, CONSTRUCT/DESCRIBE result types.
+- RDF format enum: `turtle`, `n-quads`, `n-triples`, `n3`.
+
+### CLI
+
+Standardized command-line tools for local-first development:
+
+- `worlds create / list / get / update / delete` — World lifecycle management.
+- `worlds sparql` — Execute inline queries or `.rq` files.
+- `worlds search` — Semantic search with filters.
+- `worlds import / export` — Bulk RDF data transfer.
+- `worlds chat` — Interactive AI chat session powered by OpenRouter.
+- Install via Deno: `deno install -A --name worlds jsr:@wazoo/worlds-cli`.
+
+### Managed console
+
+Organization and resource management interface for cloud deployments:
+
+- WorkOS AuthKit integration for secure login.
+- Automatic Turso database provisioning per world.
+- OpenRouter API key management per organization.
+- Deno Deploy orchestration for world server instances.
+
+### Documentation
+
+- Full API endpoint reference with request/response schemas and curl examples.
+- CLI command reference with all flags.
+- Configuration reference for server, console, CLI, and embedding providers.
+- Request lifecycle and architecture documentation.

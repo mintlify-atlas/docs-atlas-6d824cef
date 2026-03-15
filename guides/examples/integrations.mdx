@@ -1,0 +1,202 @@
+---
+title: "Integrations"
+description: "Integrate Worlds with communication platforms, productivity tools, and AI frameworks."
+---
+
+Worlds integrates with your existing toolchain through the REST API and SDK. Below are patterns for common integration targets.
+
+## AI framework integrations
+
+<CardGroup cols={2}>
+  <Card title="Vercel AI SDK" icon="sparkles">
+    Use Worlds as a persistent memory store for AI agents built with the Vercel AI SDK. Expose search and SPARQL as agent tools.
+  </Card>
+  <Card title="LangChain" icon="link">
+    Wrap the Worlds SDK as a LangChain retriever or tool to give LangChain agents structured memory.
+  </Card>
+  <Card title="LlamaIndex" icon="database">
+    Use Worlds as a knowledge graph store in LlamaIndex pipelines for graph-augmented generation.
+  </Card>
+  <Card title="MCP server" icon="server">
+    Build a Model Context Protocol server using the Worlds SDK to expose graph memory to any MCP-compatible LLM host.
+  </Card>
+</CardGroup>
+
+### Vercel AI SDK tool pattern
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+import { tool } from "ai";
+import { z } from "zod";
+
+const sdk = new WorldsSdk({
+  baseUrl: process.env.WORLDS_BASE_URL!,
+  apiKey: process.env.WORLDS_API_KEY!,
+});
+
+// Reusable tool factory for any worldId
+export function worldsTools(worldId: string) {
+  return {
+    searchKnowledge: tool({
+      description: "Search the knowledge graph for relevant facts.",
+      parameters: z.object({
+        query: z.string(),
+        limit: z.number().optional().default(10),
+      }),
+      execute: async ({ query, limit }) =>
+        sdk.worlds.search(worldId, query, { limit }),
+    }),
+    sparqlQuery: tool({
+      description: "Run a SPARQL SELECT query against the knowledge graph.",
+      parameters: z.object({ sparql: z.string() }),
+      execute: async ({ sparql }) => {
+        const result = await sdk.worlds.sparql(worldId, sparql);
+        if (result && "results" in result) return result.results.bindings;
+        return [];
+      },
+    }),
+    insertFact: tool({
+      description: "Insert a new fact using SPARQL INSERT DATA.",
+      parameters: z.object({ sparql: z.string() }),
+      execute: async ({ sparql }) => {
+        await sdk.worlds.sparql(worldId, sparql);
+        return { success: true };
+      },
+    }),
+  };
+}
+```
+
+## Communication platform integrations
+
+### Discord bot
+
+Store and retrieve server history with semantic context:
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+import { Client, Events } from "discord.js";
+
+const sdk = new WorldsSdk({
+  baseUrl: process.env.WORLDS_BASE_URL!,
+  apiKey: process.env.WORLDS_API_KEY!,
+});
+
+const worldId = process.env.DISCORD_WORLD_ID!;
+const client = new Client({ intents: ["Guilds", "GuildMessages"] });
+
+client.on(Events.MessageCreate, async (message) => {
+  if (message.author.bot) return;
+
+  // Store message as a triple
+  const userId = `http://discord.com/users/${message.author.id}`;
+  const msgId = `http://discord.com/messages/${message.id}`;
+
+  await sdk.worlds.sparql(worldId, `
+    PREFIX schema: <http://schema.org/>
+    PREFIX dc:     <http://purl.org/dc/terms/>
+    INSERT DATA {
+      <${msgId}> a schema:Message ;
+        schema:author <${userId}> ;
+        dc:created "${new Date(message.createdTimestamp).toISOString()}" ;
+        schema:text "${message.content.replace(/"/g, "'")}" .
+    }
+  `);
+});
+
+// Search history for context
+async function searchHistory(query: string) {
+  return sdk.worlds.search(worldId, query, {
+    limit: 10,
+    types: ["http://schema.org/Message"],
+  });
+}
+```
+
+### Slack app
+
+Provide your team with an agent that has long-term organizational memory:
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+const sdk = new WorldsSdk({
+  baseUrl: process.env.WORLDS_BASE_URL!,
+  apiKey: process.env.WORLDS_API_KEY!,
+});
+
+const worldId = process.env.SLACK_WORLD_ID!;
+
+// Store a decision or key message
+async function storeDecision(channelId: string, text: string, userId: string) {
+  const decisionId = `http://slack.com/decisions/${Date.now()}`;
+  await sdk.worlds.sparql(worldId, `
+    PREFIX schema: <http://schema.org/>
+    PREFIX org:    <http://example.com/org/> .
+    INSERT DATA {
+      <${decisionId}> a org:Decision ;
+        schema:text "${text.replace(/"/g, "'")}" ;
+        org:madeBy <http://slack.com/users/${userId}> ;
+        org:channel "${channelId}" .
+    }
+  `);
+}
+
+// Search org decisions by topic
+async function findDecisions(topic: string) {
+  return sdk.worlds.search(worldId, topic, {
+    limit: 10,
+    types: ["http://example.com/org/Decision"],
+  });
+}
+```
+
+## Productivity tool integrations
+
+### Notion sync
+
+Automatically synchronize a Notion workspace into a queryable graph:
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+import { Client as NotionClient } from "@notionhq/client";
+
+const sdk = new WorldsSdk({
+  baseUrl: process.env.WORLDS_BASE_URL!,
+  apiKey: process.env.WORLDS_API_KEY!,
+});
+
+const notion = new NotionClient({ auth: process.env.NOTION_TOKEN });
+const worldId = process.env.NOTION_WORLD_ID!;
+
+async function syncNotionPage(pageId: string) {
+  const page = await notion.pages.retrieve({ page_id: pageId });
+  const pageIri = `http://notion.com/pages/${pageId}`;
+
+  // Build triples from Notion page properties
+  const triples: string[] = [];
+  if ("properties" in page) {
+    for (const [key, prop] of Object.entries(page.properties)) {
+      if (prop.type === "title" && prop.title[0]?.plain_text) {
+        triples.push(
+          `<${pageIri}> <http://schema.org/name> "${prop.title[0].plain_text}" .`,
+        );
+      }
+    }
+  }
+
+  if (triples.length > 0) {
+    await sdk.worlds.sparql(worldId, `
+      PREFIX schema: <http://schema.org/>
+      INSERT DATA {
+        <${pageIri}> a schema:WebPage .
+        ${triples.join("\n        ")}
+      }
+    `);
+  }
+}
+```
+
+<Tip>
+For high-volume integrations, batch your SPARQL inserts into a single `INSERT DATA` block with multiple triples rather than making one API call per triple. This reduces HTTP overhead and commits the search index once per batch.
+</Tip>

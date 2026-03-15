@@ -1,0 +1,138 @@
+---
+title: "Use cases"
+description: "How organizations and developers are using the Worlds Platform for neuro-symbolic and agentic applications."
+---
+
+The Worlds Platform provides a flexible infrastructure for a wide range of
+neuro-symbolic and agentic applications. Below are the primary categories of
+use.
+
+## Personal AI memory
+
+Build a truly personalized assistant that remembers every detail of your
+digital life — from meeting notes to research papers — with deterministic
+accuracy.
+
+- **Deterministic recall**: No more "I think you mentioned..." — the agent
+  retrieves specific facts from your private RDF graph.
+- **Privacy by design**: Memory stays local or edge-deployed, ensuring
+  high-fidelity recall without compromising data ownership.
+
+```typescript
+// Store a personal memory
+await sdk.worlds.sparql(
+  "personal-memory",
+  `
+    PREFIX ex: <https://example.org/me/>
+    PREFIX schema: <https://schema.org/>
+    INSERT DATA {
+      ex:meeting-2026-03-15 a schema:Event ;
+        schema:name "Q1 planning meeting" ;
+        schema:description "Decided to prioritize the search feature." ;
+        schema:startDate "2026-03-15"^^xsd:date .
+    }
+  `,
+);
+
+// Recall it later
+const results = await sdk.worlds.search(
+  "personal-memory",
+  "what did we decide about search?",
+  { types: ["https://schema.org/Event"] },
+);
+```
+
+## Enterprise knowledge graphs
+
+Transform fragmented organizational data into a unified, queryable knowledge
+state for internal tools and agents.
+
+- **Structural grounding**: Ensure your enterprise bots answer questions based
+  on the latest company ontologies.
+- **Auditability**: Every agent action is backed by a verifiable fact in the
+  graph, providing a clear audit trail for compliance.
+
+<Note>
+  Enterprise deployments benefit from the Worlds Console's organization-level
+  provisioning and RBAC controls. See the [Architecture](/overview/architecture)
+  page for details on multi-tenant isolation.
+</Note>
+
+## Agentic tool grounding
+
+Provide autonomous agents with a structured "map" of the tools and systems
+they interact with.
+
+- **Schema discovery**: Agents use `discover-schema` to introspect available
+  classes and properties before executing actions.
+- **Constraint enforcement**: Use symbolic logic to define what an agent _can_
+  and _cannot_ do within a specific operational context.
+
+```typescript
+import { createTools } from "@wazoo/worlds-ai-sdk";
+import { generateText } from "ai";
+import { anthropic } from "@ai-sdk/anthropic";
+
+const tools = createTools({
+  sdk,
+  sources: [{ id: "tool-registry", write: false }],
+});
+
+// The agent discovers available tools and their constraints
+// from the knowledge graph before taking any action
+const { text } = await generateText({
+  model: anthropic("claude-opus-4-5"),
+  tools,
+  prompt: "What tools are available for sending emails?",
+});
+```
+
+## Research and analysis
+
+Manage complex research datasets where relationships between entities are as
+important as the data points themselves.
+
+- **Complex querying**: Use SPARQL to find non-obvious connections across
+  massive datasets.
+- **Multi-modal fusion**: Combine document text with structural knowledge for
+  deep, contextual analysis.
+
+```typescript
+// Find all co-authors of a specific researcher
+const coAuthors = await sdk.worlds.sparql(
+  "research-graph",
+  `
+    PREFIX ex: <https://example.org/>
+    PREFIX schema: <https://schema.org/>
+
+    SELECT DISTINCT ?coAuthor ?coAuthorName WHERE {
+      ex:alice schema:author ?paper .
+      ?paper schema:author ?coAuthor .
+      ?coAuthor schema:name ?coAuthorName .
+      FILTER(?coAuthor != ex:alice)
+    }
+    ORDER BY ?coAuthorName
+  `,
+);
+```
+
+## Comparison by use case
+
+<CardGroup cols={2}>
+  <Card title="Personal memory" icon="user">
+    Local or edge-deployed. Privacy-first. Single agent with long-term
+    recall across sessions.
+  </Card>
+  <Card title="Enterprise knowledge" icon="building">
+    Multi-tenant with RBAC. Compliance-focused. Multiple agents sharing a
+    governed knowledge state.
+  </Card>
+  <Card title="Agentic grounding" icon="robot">
+    Read-only knowledge for constraint enforcement. Schema discovery before
+    action execution.
+  </Card>
+  <Card title="Research and analysis" icon="flask">
+    Complex SPARQL traversals. Multi-hop relationship queries. Bulk RDF
+    import from existing datasets.
+  </Card>
+</CardGroup>

@@ -1,0 +1,350 @@
+---
+title: "Command-line interface"
+description: "Full reference for the Worlds CLI — manage worlds, import data, run SPARQL queries, and chat with your knowledge graph from the terminal."
+---
+
+The Worlds CLI lets you manage worlds, import and export RDF data, run SPARQL queries, and start an interactive AI chat session — all from your terminal.
+
+## Installation
+
+Install the CLI using [Deno](https://deno.com):
+
+```bash
+deno install -A --name worlds jsr:@wazoo/worlds-cli
+```
+
+Verify the installation:
+
+```bash
+worlds --help
+```
+
+## Environment variables
+
+| Variable | Purpose |
+| :------- | :------ |
+| `WORLDS_API_KEY` | API key for authenticating against a remote server. |
+| `WORLDS_BASE_URL` | Base URL of the API (e.g., `https://api.wazoo.dev`). |
+| `LIBSQL_URL` | Database connection URL for local in-process mode. |
+| `OPENROUTER_API_KEY` | Required for the `chat` command. |
+| `OPENROUTER_MODEL` | AI model for `chat` (default: `google/gemini-2.0-flash-001`). |
+
+<Tip>
+  Set `WORLDS_API_KEY` and `WORLDS_BASE_URL` in your shell profile or `.env` file so you don't need to pass them with every command.
+</Tip>
+
+---
+
+## Commands
+
+### `worlds create`
+
+Creates a new world.
+
+```bash
+worlds create --label <label> [--slug <slug>] [--description <desc>]
+```
+
+| Flag | Alias | Required | Description |
+| :--- | :---- | :------- | :---------- |
+| `--label` | `-l` | Yes | Human-readable display name for the world. |
+| `--slug` | `-s` | No | URL-safe identifier. Auto-generated from `--label` if omitted. |
+| `--description` | `-d` | No | Optional description of the world. |
+| `--help` | `-h` | No | Print usage information. |
+
+**Example:**
+
+```bash
+worlds create --label "My Knowledge Base" --slug "my-kb" --description "Internal research graph"
+```
+
+**Output:** The created world object as JSON.
+
+---
+
+### `worlds list`
+
+Lists worlds with pagination.
+
+```bash
+worlds list [--page <n>] [--pageSize <n>]
+```
+
+| Flag | Alias | Default | Description |
+| :--- | :---- | :------ | :---------- |
+| `--page` | `-p` | `1` | Page number (1-indexed). |
+| `--pageSize` | `-s` | `20` | Number of results per page. |
+| `--help` | `-h` | — | Print usage information. |
+
+**Example:**
+
+```bash
+worlds list --page 2 --pageSize 10
+```
+
+**Output:** JSON array of world objects.
+
+---
+
+### `worlds get`
+
+Retrieves a single world by ID or slug.
+
+```bash
+worlds get <worldId>
+```
+
+| Argument | Required | Description |
+| :------- | :------- | :---------- |
+| `worldId` | Yes | The world ID (ULID) or slug. |
+
+| Flag | Alias | Description |
+| :--- | :---- | :---------- |
+| `--help` | `-h` | Print usage information. |
+
+**Example:**
+
+```bash
+worlds get my-kb
+```
+
+**Output:** The world object as JSON.
+
+---
+
+### `worlds update`
+
+Updates an existing world's metadata.
+
+```bash
+worlds update <worldId> [--slug <slug>] [--label <label>] [--description <desc>]
+```
+
+| Argument | Required | Description |
+| :------- | :------- | :---------- |
+| `worldId` | Yes | The world ID (ULID) or slug. |
+
+| Flag | Alias | Description |
+| :--- | :---- | :---------- |
+| `--slug` | `-s` | New URL-safe identifier. |
+| `--label` | `-l` | New display name. |
+| `--description` | `-d` | New description. |
+| `--help` | `-h` | Print usage information. |
+
+**Example:**
+
+```bash
+worlds update my-kb --label "My Updated Knowledge Base"
+```
+
+---
+
+### `worlds delete`
+
+Soft-deletes a world. The world's data is retained on the server but becomes inaccessible via the API.
+
+```bash
+worlds delete <worldId>
+```
+
+| Argument | Required | Description |
+| :------- | :------- | :---------- |
+| `worldId` | Yes | The world ID (ULID) or slug. |
+
+| Flag | Alias | Description |
+| :--- | :---- | :---------- |
+| `--help` | `-h` | Print usage information. |
+
+**Example:**
+
+```bash
+worlds delete my-kb
+```
+
+<Warning>
+  Deletion is a soft operation — the `deletedAt` timestamp is set and the world is hidden from all API responses. This is not reversible through the CLI or API.
+</Warning>
+
+---
+
+### `worlds sparql`
+
+Executes a SPARQL query or update against a world. Accepts either a SPARQL string directly or a path to a `.rq` / `.sparql` file.
+
+```bash
+worlds sparql <worldId> <query_or_file_path>
+```
+
+| Argument | Required | Description |
+| :------- | :------- | :---------- |
+| `worldId` | Yes | The world ID (ULID) or slug. |
+| `query_or_file_path` | Yes | A SPARQL query string, or a file path to a `.rq`/`.sparql` file. |
+
+| Flag | Alias | Description |
+| :--- | :---- | :---------- |
+| `--help` | `-h` | Print usage information. |
+
+**Examples:**
+
+```bash
+# Inline query
+worlds sparql my-kb "SELECT * WHERE { ?s ?p ?o } LIMIT 5"
+
+# From a file
+worlds sparql my-kb ./queries/find-entities.rq
+```
+
+**Output:** SPARQL results as JSON (`application/sparql-results+json`).
+
+---
+
+### `worlds search`
+
+Performs hybrid semantic and full-text search over a world's RDF triples.
+
+```bash
+worlds search <worldId> <query> [--limit <n>] [--subjects <iri>] [--predicates <iri>]
+```
+
+| Argument | Required | Description |
+| :------- | :------- | :---------- |
+| `worldId` | Yes | The world ID (ULID) or slug. |
+| `query` | Yes | Natural language or keyword query string. |
+
+| Flag | Alias | Default | Description |
+| :--- | :---- | :------ | :---------- |
+| `--limit` | `-l` | `20` | Maximum number of results (≤ 100). |
+| `--subjects` | `-s` | — | Filter to specific subject IRIs. Repeatable. |
+| `--predicates` | `-p` | — | Filter to specific predicate IRIs. Repeatable. |
+| `--help` | `-h` | — | Print usage information. |
+
+**Examples:**
+
+```bash
+# Basic search
+worlds search my-kb "compute efficiency"
+
+# With filters
+worlds search my-kb "efficiency" --limit 5 --subjects "https://example.org/Entity1"
+```
+
+**Output:** JSON array of triple search results with relevance scores.
+
+---
+
+### `worlds import`
+
+Imports RDF data from a local file into a world.
+
+```bash
+worlds import <worldId> <file_path> [--format <format>]
+```
+
+| Argument | Required | Description |
+| :------- | :------- | :---------- |
+| `worldId` | Yes | The world ID (ULID) or slug. |
+| `file_path` | Yes | Path to the local RDF file. |
+
+| Flag | Alias | Default | Description |
+| :--- | :---- | :------ | :---------- |
+| `--format` | `-f` | Detected from `Content-Type` | RDF serialization: `turtle`, `n-quads`, `n-triples`, `n3`. |
+| `--help` | `-h` | — | Print usage information. |
+
+**Example:**
+
+```bash
+worlds import my-kb ./data/knowledge.ttl --format turtle
+```
+
+---
+
+### `worlds export`
+
+Exports the full RDF graph of a world to stdout.
+
+```bash
+worlds export <worldId> [--format <format>]
+```
+
+| Argument | Required | Description |
+| :------- | :------- | :---------- |
+| `worldId` | Yes | The world ID (ULID) or slug. |
+
+| Flag | Alias | Default | Description |
+| :--- | :---- | :------ | :---------- |
+| `--format` | `-f` | `n-quads` | RDF serialization: `turtle`, `n-quads`, `n-triples`, `n3`. |
+| `--help` | `-h` | — | Print usage information. |
+
+**Example:**
+
+```bash
+# Export as Turtle and save to file
+worlds export my-kb --format turtle > output.ttl
+```
+
+---
+
+### `worlds chat`
+
+Starts an interactive AI chat session backed by the world's knowledge graph. The AI uses SPARQL and semantic search tools to answer questions and, optionally, to write new facts.
+
+<Info>
+  Requires `OPENROUTER_API_KEY` to be set. The default model is `google/gemini-2.0-flash-001`. Override with `OPENROUTER_MODEL`.
+</Info>
+
+```bash
+worlds chat --worldId <id> [--write] [--userIri <iri>]
+```
+
+| Flag | Alias | Required | Description |
+| :--- | :---- | :------- | :---------- |
+| `--worldId` | `-w` | Yes | ID of the world to chat with. |
+| `--write` | — | No | Enable write operations (INSERT/DELETE). Disabled by default. |
+| `--userIri` | `-u` | No | IRI to attribute provenance of written triples. |
+| `--help` | `-h` | No | Print usage and environment variable info. |
+
+**Example:**
+
+```bash
+export OPENROUTER_API_KEY="sk-or-..."
+worlds chat --worldId my-kb --write --userIri "https://example.org/users/alice"
+```
+
+Type `exit` at the prompt to end the session.
+
+<Warning>
+  Passing `--write` allows the AI agent to permanently modify the knowledge graph. Review tool calls carefully when using this mode.
+</Warning>
+
+---
+
+## Quick-start workflow
+
+<Steps>
+  <Step title="Install the CLI">
+    ```bash
+    deno install -A --name worlds jsr:@wazoo/worlds-cli
+    ```
+  </Step>
+  <Step title="Configure credentials">
+    ```bash
+    export WORLDS_API_KEY="YOUR_API_KEY"
+    export WORLDS_BASE_URL="https://api.wazoo.dev"
+    ```
+  </Step>
+  <Step title="Create a world">
+    ```bash
+    worlds create --label "My First World" --slug "my-first-world"
+    ```
+  </Step>
+  <Step title="Import RDF data">
+    ```bash
+    worlds import my-first-world ./data.ttl --format turtle
+    ```
+  </Step>
+  <Step title="Search the graph">
+    ```bash
+    worlds search my-first-world "compute efficiency"
+    ```
+  </Step>
+</Steps>

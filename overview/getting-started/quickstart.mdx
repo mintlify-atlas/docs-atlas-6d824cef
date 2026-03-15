@@ -1,0 +1,192 @@
+---
+title: "Quickstart"
+description: "Integrate Worlds into your AI application in minutes."
+---
+
+This guide walks you through installing the SDK, creating your first world,
+inserting triples via SPARQL, and querying the results.
+
+## Installation
+
+Add the Worlds SDK to your project using your preferred package manager.
+
+<CodeGroup>
+
+```bash deno
+deno add jsr:@wazoo/worlds-sdk
+```
+
+```bash npm
+npx jsr add @wazoo/worlds-sdk
+```
+
+```bash pnpm
+pnpm i jsr:@wazoo/worlds-sdk
+```
+
+```bash yarn
+yarn add jsr:@wazoo/worlds-sdk
+```
+
+```bash bun
+bunx jsr add @wazoo/worlds-sdk
+```
+
+</CodeGroup>
+
+## Complete working example
+
+The following example demonstrates the full lifecycle: initializing the SDK,
+creating a world, inserting triples, and querying them back.
+
+<Steps>
+  <Step title="Initialize the SDK">
+    Import `WorldsSdk` and configure it with your API endpoint and key.
+
+    ```typescript
+    import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+    const sdk = new WorldsSdk({
+      baseUrl: "http://localhost:8000",
+      apiKey: "your-api-key",
+    });
+    ```
+
+    <Tip>
+      For local development without an API key, leave `apiKey` as an empty
+      string. The server runs in Unprotected Mode when no key is configured.
+      See [Authentication](/overview/getting-started/authentication) for details.
+    </Tip>
+  </Step>
+
+  <Step title="Create a world">
+    A world is an isolated knowledge graph container. Create one with a unique
+    slug.
+
+    ```typescript
+    const world = await sdk.worlds.create({
+      slug: "my-knowledge-base",
+      label: "My Knowledge Base",
+      description: "A world for storing structured facts about my project.",
+    });
+
+    console.log("Created world:", world.id);
+    ```
+  </Step>
+
+  <Step title="Insert triples via SPARQL">
+    Use a SPARQL `INSERT DATA` update to add facts to your world.
+
+    ```typescript
+    await sdk.worlds.sparql(
+      world.id,
+      `
+        PREFIX schema: <https://schema.org/>
+        PREFIX ex: <https://example.org/>
+
+        INSERT DATA {
+          ex:alice a schema:Person ;
+            schema:name "Alice" ;
+            schema:jobTitle "Engineer" .
+
+          ex:bob a schema:Person ;
+            schema:name "Bob" ;
+            schema:knows ex:alice .
+        }
+      `,
+    );
+
+    console.log("Triples inserted.");
+    ```
+  </Step>
+
+  <Step title="Query results">
+    Run a SPARQL `SELECT` query to retrieve facts from the world.
+
+    ```typescript
+    const results = await sdk.worlds.sparql(
+      world.id,
+      `
+        PREFIX schema: <https://schema.org/>
+        PREFIX ex: <https://example.org/>
+
+        SELECT ?person ?name ?title WHERE {
+          ?person a schema:Person ;
+            schema:name ?name .
+          OPTIONAL { ?person schema:jobTitle ?title . }
+        }
+      `,
+    );
+
+    console.log("Results:", JSON.stringify(results, null, 2));
+    ```
+
+    The response follows the [SPARQL 1.1 JSON Results](https://www.w3.org/TR/sparql11-results-json/)
+    format.
+  </Step>
+
+  <Step title="Search with natural language">
+    Use hybrid search to find entities using natural language alongside the
+    precision of graph filters.
+
+    ```typescript
+    const matches = await sdk.worlds.search(
+      world.id,
+      "engineer who knows someone",
+      {
+        limit: 10,
+        types: ["https://schema.org/Person"],
+      },
+    );
+
+    console.log("Search results:", matches);
+    ```
+  </Step>
+</Steps>
+
+## Import RDF data
+
+You can bulk-load existing RDF data into a world using the `import` method.
+Supported formats are `turtle`, `n-triples`, `n3`, and `n-quads`.
+
+```typescript
+await sdk.worlds.import(
+  world.id,
+  `
+    @prefix schema: <https://schema.org/> .
+    @prefix ex: <https://example.org/> .
+
+    ex:carol a schema:Person ;
+      schema:name "Carol" ;
+      schema:jobTitle "Researcher" .
+  `,
+  { format: "turtle" },
+);
+```
+
+## Export a world
+
+Export the full RDF graph of a world back to a serialized format.
+
+```typescript
+const buffer = await sdk.worlds.export(world.id, { format: "turtle" });
+const text = new TextDecoder().decode(buffer);
+console.log(text);
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/overview/getting-started/authentication">
+    Learn how to generate and manage API keys.
+  </Card>
+  <Card title="Agent integration" icon="robot" href="/overview/getting-started/agent-integration">
+    Connect Worlds to your AI agent using the AI SDK.
+  </Card>
+  <Card title="World memory" icon="brain" href="/overview/world-memory">
+    Understand the neuro-symbolic memory architecture.
+  </Card>
+  <Card title="API reference" icon="code" href="/reference">
+    Explore the full REST API specification.
+  </Card>
+</CardGroup>

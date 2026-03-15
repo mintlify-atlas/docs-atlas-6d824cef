@@ -1,0 +1,169 @@
+---
+title: "Developer guide"
+description: "Architecture, implementation patterns, and testing standards for contributors to the Worlds Platform."
+---
+
+This guide covers the standards and patterns for contributing to the Worlds Platform codebase. It explains how the server is structured, how to add new resources and routes, and how the testing framework works.
+
+## Prerequisites
+
+Before you begin, install the following tools:
+
+- **Deno** (>= 2.x): Primary runtime and task runner for the server, SDK, and CLI.
+- **Node.js** (v20+): Required for the console (`packages/console`) and docs (`packages/docs`).
+- **Git**: For version control.
+
+## Setting up the workspace
+
+<Steps>
+  <Step title="Fork and clone the repository">
+    ```bash
+    git clone https://github.com/wazootech/worlds.git
+    cd worlds
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install Node.js dependencies for the console and docs packages:
+
+    ```bash
+    deno task install
+    ```
+  </Step>
+
+  <Step title="Configure environment">
+    Copy the example environment file for the server:
+
+    ```bash
+    cp packages/server/.env.example packages/server/.env
+    ```
+
+    The default values work for local development without any changes.
+  </Step>
+
+  <Step title="Start the development server">
+    ```bash
+    deno task start:server
+    ```
+
+    The Worlds API server starts on `http://localhost:8000`. To start the web console alongside it:
+
+    ```bash
+    deno task start
+    ```
+  </Step>
+</Steps>
+
+## Monorepo structure
+
+The repository is a Deno workspace organized into the following packages:
+
+| Package | Description |
+| :--- | :--- |
+| `packages/server` | Core REST API server |
+| `packages/sdk` | TypeScript SDK (`@wazoo/worlds-sdk`) |
+| `packages/ai-sdk` | AI SDK integration (`@wazoo/worlds-ai-sdk`) |
+| `packages/cli` | CLI tool (`@wazoo/worlds-cli`) |
+| `packages/console` | Next.js web console (npm) |
+| `packages/docs` | Documentation site (npm / Mintlify) |
+
+## Resource pattern
+
+The Worlds Platform follows a consistent directory structure for resources within the core and world-specific database scopes.
+
+### Directory structure
+
+Each resource lives within an internal database service directory and contains the following files:
+
+- **`queries.sql`**: DDL and CRUD SQL operations.
+- **`queries.sql.ts`**: Generated string constants for SQL queries (run `deno task generate` to regenerate).
+- **`schema.ts`**: Zod schemas for the resource.
+- **`service.ts`**: Service class implementation.
+- **`service.test.ts`**: Deno tests using in-memory database clients.
+
+### Implementation checklist
+
+Follow this checklist when adding new resources, tables, or routes:
+
+<AccordionGroup>
+  <Accordion title="New resource">
+    - Create the database resource directory.
+    - Add `queries.sql` with DDL and CRUD operations.
+    - Run `deno task generate` to update SQL embedder files.
+    - Create `schema.ts` and `service.ts`.
+    - Register the table in the database initialization service.
+    - Implement unit tests in `service.test.ts`.
+  </Accordion>
+
+  <Accordion title="New world table">
+    - Add DDL to the resource's `queries.sql` file.
+    - Register the table in the world-scope portion of `initializeDatabase`.
+    - Verify `DatabaseManager` implementations execute this initialization.
+  </Accordion>
+
+  <Accordion title="New route">
+    - Create `routes/v1/.../route.ts`.
+    - Implement a default export returning a `Router` instance.
+    - Register the module path in the server configuration.
+    - Implement authentication, validation, and error handling.
+    - Add integration tests in `route.test.ts`.
+  </Accordion>
+</AccordionGroup>
+
+## Routing and API
+
+The platform uses a modular routing system. Routes are listed as modules in the server configuration.
+
+### Route handler pattern
+
+Every route handler follows a consistent execution order:
+
+1. **Path parameters**: Read parameters from `ctx.params`.
+2. **Authentication**: Call `authorizeRequest` to verify the caller's identity.
+3. **Validation**: Parse and validate the request body or query using Zod.
+4. **Business logic**: Distribute work to services, or resolve a world database client.
+5. **Response**: Return a successful result via `Response.json(record)` or an `ErrorResponse`.
+
+## Running tests
+
+```bash
+deno task test
+```
+
+This runs all tests across the Deno workspace. Tests use in-memory database clients so no external services are required.
+
+## Testing framework
+
+The platform provides a structured `TestContext` utility for isolated test environments.
+
+### TestContext
+
+Each test session gets:
+
+- **Isolated main database**: An in-memory main client built fresh for the session.
+- **Schema initialization**: The database schema is automatically applied.
+- **Memory database management**: `MemoryDatabaseManager` provides fresh in-memory world databases per test.
+
+### Testing patterns
+
+- **Service tests**: Verify individual resource services through CRUD operation assertions.
+- **Route tests**: Verify API endpoints by calling `app.fetch()` with a mock `Request`.
+- **Identity mocking**: Use `createTestOrganization(context)` to insert a mock organization and obtain a valid API key.
+
+## Building packages
+
+Run a dry-run publish to verify all packages are valid before opening a PR:
+
+```bash
+deno task publish:dry
+```
+
+To run the full pre-commit check (format, lint, type-check, test, and dry publish):
+
+```bash
+deno task precommit
+```
+
+<Tip>
+  The CI pipeline runs `deno fmt`, `deno lint`, and `deno task test` on every push to `main` and on all pull requests targeting `main`.
+</Tip>

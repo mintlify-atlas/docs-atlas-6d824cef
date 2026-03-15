@@ -1,0 +1,179 @@
+---
+title: "Production deployment"
+description: "Deploy the Worlds Platform to the cloud using Deno Deploy, Turso, WorkOS, and OpenRouter."
+---
+
+To run a production-grade instance of the Worlds Platform, you need to configure identity, compute, storage, and AI model services. This guide covers the full provisioning sequence.
+
+## Infrastructure overview
+
+<CardGroup cols={2}>
+  <Card title="Identity (WorkOS)" icon="shield">
+    AuthKit handles authentication. Provides API key, client ID, and secure cookie password.
+  </Card>
+  <Card title="Compute (Deno Deploy)" icon="server">
+    The Worlds API server runs on Deno Deploy. Requires a personal access token.
+  </Card>
+  <Card title="Storage (Turso)" icon="database">
+    LibSQL/Turso provides the main database and per-world databases. Requires an API token and organization name.
+  </Card>
+  <Card title="AI models (OpenRouter)" icon="sparkles">
+    Production embeddings use OpenRouter. Requires an API key for the `openai/text-embedding-3-small` model by default.
+  </Card>
+</CardGroup>
+
+<Warning>
+Protect `WORKOS_COOKIE_PASSWORD` and `TURSO_API_TOKEN` securely. These keys grant admin or root access to identity management and persistent storage respectively.
+</Warning>
+
+## Environment variables
+
+The server reads the following variables. All production variables are required unless marked optional.
+
+### Server (`packages/server`)
+
+```bash
+# API authentication
+WORLDS_API_KEY=""                 # Admin key for API access
+
+# Database (local dev)
+LIBSQL_URL="file:./worlds.db"     # LibSQL connection URL
+LIBSQL_AUTH_TOKEN=""              # Auth token (required for remote Turso)
+
+# Production storage
+TURSO_API_TOKEN=""                # Turso Management API token
+TURSO_ORG=""                      # Turso organization name
+
+# Embeddings
+OPENROUTER_API_KEY=""             # OpenRouter API key
+OPENROUTER_EMBEDDINGS_MODEL="openai/text-embedding-3-small"
+WORLDS_EMBEDDINGS_DIMENSIONS="768"
+
+# Local embeddings (optional alternative to OpenRouter)
+OLLAMA_BASE_URL="http://localhost:11434"
+OLLAMA_EMBEDDINGS_MODEL="nomic-embed-text"
+```
+
+### Console (`packages/console`)
+
+```bash
+# WorkOS AuthKit
+WORKOS_CLIENT_ID=""
+WORKOS_API_KEY=""
+WORKOS_COOKIE_PASSWORD=""         # Generate a secure random password
+WORKOS_REDIRECT_URI="https://your-domain.com/callback"
+
+# Worlds API connection
+WORLDS_API_BASE_URL=""
+WORLDS_API_KEY=""
+
+# Infrastructure provisioning
+DENO_DEPLOY_TOKEN=""              # Personal access token for Deno Deploy
+TURSO_API_TOKEN=""
+TURSO_ORG=""
+
+# AI
+OPENROUTER_API_KEY=""
+WORLDS_EMBEDDINGS_DIMENSIONS="768"
+```
+
+## Provision infrastructure
+
+<Steps>
+  <Step title="Set up WorkOS AuthKit">
+    1. Create a WorkOS account and application at [workos.com](https://workos.com).
+    2. Configure an AuthKit environment and note your `WORKOS_API_KEY` and `WORKOS_CLIENT_ID`.
+    3. Generate a strong random string for `WORKOS_COOKIE_PASSWORD` (minimum 32 characters).
+    4. Add your production callback URL to the allowed redirect URIs.
+  </Step>
+  <Step title="Create a Turso organization">
+    1. Sign up at [turso.tech](https://turso.tech) and create an organization.
+    2. Generate a Turso Management API token from the dashboard.
+    3. Note your organization name for `TURSO_ORG`.
+  </Step>
+  <Step title="Configure OpenRouter">
+    1. Visit [openrouter.ai/keys](https://openrouter.ai/keys) to generate an API key.
+    2. The platform uses `openai/text-embedding-3-small` by default at 768 dimensions.
+    3. Set `OPENROUTER_API_KEY` in both the server and console environments.
+  </Step>
+  <Step title="Generate a Deno Deploy token">
+    Visit [dash.deno.com](https://dash.deno.com) and create a personal access token.
+    Set it as `DENO_DEPLOY_TOKEN` in the console environment.
+  </Step>
+</Steps>
+
+## Deploy the console
+
+The console is a Next.js application. Deploy it to Vercel, Netlify, or a VPS.
+
+<Tabs>
+  <Tab title="Vercel">
+    <Steps>
+      <Step title="Import">Import your repository into Vercel.</Step>
+      <Step title="Configure">
+        Set all environment variables from the console section above in your Vercel project settings.
+      </Step>
+      <Step title="Verify">
+        Ensure `WORKOS_REDIRECT_URI` matches your Vercel deployment callback URL (e.g., `https://your-app.vercel.app/callback`).
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Netlify">
+    <Steps>
+      <Step title="Connect">Connect your repository to Netlify.</Step>
+      <Step title="Configure">
+        Add the environment variables in your Netlify site settings under **Build & deploy > Environment**.
+      </Step>
+      <Step title="Verify">
+        Ensure `WORKOS_REDIRECT_URI` matches your Netlify deployment URL.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="VPS">
+    <Steps>
+      <Step title="Clone">Clone the repository to your server.</Step>
+      <Step title="Configure">
+        Create a `.env` file in `packages/console/` with your environment variables.
+      </Step>
+      <Step title="Build">
+        Build with `npm run build` and define a process using PM2 or a systemd service.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Automatic world provisioning
+
+Once the console is running, creating a new world triggers automatic infrastructure provisioning:
+
+<Steps>
+  <Step title="Log in">
+    Access your console and authenticate via WorkOS AuthKit.
+  </Step>
+  <Step title="Create an organization">
+    Define your organization within the console dashboard.
+  </Step>
+  <Step title="Automatic provisioning">
+    When you create a world, the platform automatically:
+    - Provisions a new Turso LibSQL database for the world.
+    - Deploys a Deno Deploy instance for the world's API.
+    - Links the database and API instance together.
+  </Step>
+</Steps>
+
+## Local development
+
+For local development, use file-based LibSQL and Ollama for embeddings:
+
+```bash
+# Server .env for local dev
+WORLDS_API_KEY="dev-key"
+LIBSQL_URL="file:./worlds.db"
+OLLAMA_BASE_URL="http://localhost:11434"
+OLLAMA_EMBEDDINGS_MODEL="nomic-embed-text"
+WORLDS_EMBEDDINGS_DIMENSIONS="768"
+```
+
+<Tip>
+Run `ollama pull nomic-embed-text` before starting the local server if using Ollama for embeddings. The `nomic-embed-text` model produces 768-dimensional vectors matching the default `WORLDS_EMBEDDINGS_DIMENSIONS`.
+</Tip>

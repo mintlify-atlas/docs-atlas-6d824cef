@@ -1,0 +1,112 @@
+---
+title: "Monitoring"
+description: "Access per-world structured logs to audit agent actions, SPARQL queries, and import events."
+---
+
+The Worlds Platform maintains a structured logging system scoped to each world. Every significant event — SPARQL queries, data imports, world lifecycle changes — produces a log entry in that world's database, giving you a complete audit trail.
+
+## Retrieving logs via SDK
+
+Use `sdk.worlds.listLogs()` to paginate through a world's log history:
+
+```typescript
+import { WorldsSdk } from "@wazoo/worlds-sdk";
+
+const sdk = new WorldsSdk({
+  baseUrl: "http://localhost:8000",
+  apiKey: "your-api-key",
+});
+
+// Retrieve the most recent 50 logs
+const logs = await sdk.worlds.listLogs(worldId, {
+  page: 1,
+  pageSize: 50,
+});
+
+for (const log of logs) {
+  console.log(`[${log.level.toUpperCase()}] ${log.message}`, log.metadata);
+}
+```
+
+### Filter by level
+
+Filter logs to a specific severity level:
+
+```typescript
+const errorLogs = await sdk.worlds.listLogs(worldId, {
+  page: 1,
+  pageSize: 20,
+  level: "error",
+});
+```
+
+## Log structure
+
+Each log entry follows the `Log` interface from `@wazoo/worlds-sdk`:
+
+```typescript
+interface Log {
+  id: string;                              // ULID
+  worldId: string;                         // World the log belongs to
+  timestamp: number;                       // Unix milliseconds
+  level: "info" | "warn" | "error" | "debug";
+  message: string;                         // Human-readable description
+  metadata: Record<string, unknown> | null; // Structured context
+}
+```
+
+## Automatic log triggers
+
+The following events automatically generate log entries. All entries are written to the world-scoped LibSQL database.
+
+| Event | Level | Metadata included |
+| :--- | :--- | :--- |
+| World created | `info` | `{ label }` |
+| World updated | `info` | Changed fields |
+| World deleted | `info` | Written before deletion to preserve audit trail |
+| SPARQL query | `info` | `{ query: string }` (truncated to 1000 chars) |
+| SPARQL update | `info` | `{ query: string }` (truncated to 1000 chars) |
+| Data imported | `info` | `{ triples: number }` |
+| Semantic search | `info` | `{ query, subjects, predicates, types }` |
+
+<Note>
+The SPARQL query is truncated to 1000 characters in the metadata for storage efficiency. For large queries, the metadata will contain the beginning of the query string.
+</Note>
+
+## Polling for live updates
+
+To stream recent activity, poll `listLogs` at an interval and track the last seen timestamp:
+
+```typescript
+let lastTimestamp = Date.now() - 60_000; // Start from 1 minute ago
+
+async function pollLogs() {
+  const logs = await sdk.worlds.listLogs(worldId, {
+    page: 1,
+    pageSize: 100,
+  });
+
+  const newLogs = logs.filter((log) => log.timestamp > lastTimestamp);
+  if (newLogs.length > 0) {
+    lastTimestamp = Math.max(...newLogs.map((l) => l.timestamp));
+    for (const log of newLogs) {
+      console.log(`[${new Date(log.timestamp).toISOString()}] ${log.message}`);
+    }
+  }
+}
+
+setInterval(pollLogs, 5000);
+```
+
+## Log levels
+
+| Level | When used |
+| :--- | :--- |
+| `info` | Normal operations: queries, imports, world lifecycle |
+| `warn` | Non-critical issues that may need attention |
+| `error` | Failures that prevented an operation from completing |
+| `debug` | Verbose diagnostic information for troubleshooting |
+
+<Tip>
+For production monitoring, forward logs to an external observability platform by periodically fetching `listLogs` and shipping entries to your log aggregator (Datadog, Grafana Loki, etc.).
+</Tip>
